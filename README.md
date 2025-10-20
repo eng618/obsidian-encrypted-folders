@@ -1,16 +1,9 @@
-# Obsidian Sample Plugin
+# Encrypted Folders
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+An Obsidian plugin that allows you to encrypt and decrypt folders within your vault for enhanced privacy and security.
 
 This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
-
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open Sample Modal" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+The plugin integrates with Obsidian's API to provide seamless folder encryption functionality while maintaining the user experience of the application.
 
 ## First time developing plugins?
 
@@ -47,16 +40,28 @@ Quick starting guide for new plugin devs:
 ## How to use
 
 - Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
+- Make sure your NodeJS is at least v22 (`node --version`).
 - `npm i` or `yarn` to install dependencies.
 - `npm run dev` to start compilation in watch mode.
 
+## Plugin Features
+
+- **Folder Encryption**: Encrypt entire folders within your Obsidian vault
+- **Secure Storage**: Protect sensitive notes and files with encryption
+- **Seamless Integration**: Works transparently with Obsidian's interface
+- **Settings Integration**: Configure encryption options through Obsidian's settings panel
+
 ## Manually installing the plugin
 
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/obsidian-encrypted-folders/`.
+
+## Author
+
+**Eric N. Garcia** - [eng618@garciaericn.com](mailto:eng618@garciaericn.com)
 
 ## Improve code quality with eslint (optional)
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
+
+- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code.
 - To use eslint with this project, make sure to install eslint from terminal:
   - `npm install -g eslint`
 - To use eslint to analyze this project use this command:
@@ -73,7 +78,7 @@ The simple way is to set the `fundingUrl` field to your link in your `manifest.j
 
 ```json
 {
-    "fundingUrl": "https://buymeacoffee.com"
+  "fundingUrl": "https://buymeacoffee.com"
 }
 ```
 
@@ -81,11 +86,11 @@ If you have multiple URLs, you can also do:
 
 ```json
 {
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
+  "fundingUrl": {
+    "Buy Me a Coffee": "https://buymeacoffee.com",
+    "GitHub Sponsor": "https://github.com/sponsors",
+    "Patreon": "https://www.patreon.com/"
+  }
 }
 ```
 
