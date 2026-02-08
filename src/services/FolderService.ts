@@ -1,4 +1,4 @@
-import { TFolder } from 'obsidian';
+import { App, TFile, TFolder } from 'obsidian';
 import { FolderMetadata } from '../models/FolderState';
 import { EncryptionService } from './EncryptionService';
 import { FileService } from './FileService';
@@ -10,6 +10,7 @@ export class FolderService {
   constructor(
     private encryptionService: EncryptionService,
     private fileService: FileService,
+    private app: App,
   ) {}
 
   /**
@@ -32,7 +33,7 @@ export class FolderService {
       id: window.crypto.randomUUID(),
       encryptionMethod: 'AES-256-GCM',
       kdfMethod: 'PBKDF2-SHA256',
-      salt: this.arrayBufferToBase64(encryptionResult.salt), // The salt used for the master key derivation
+      salt: this.arrayBufferToBase64(encryptionResult.salt),
       iterations: 600000,
       lockFile: this.META_FILE_NAME,
       testToken: this.arrayBufferToBase64(combinedToken),
@@ -42,6 +43,88 @@ export class FolderService {
     const jsonString = JSON.stringify(metadata, null, 2);
     const encoder2 = new TextEncoder();
     await this.fileService.writeBinary(metaPath, encoder2.encode(jsonString).buffer);
+
+    // Initial encryption of contents
+    const salt = encryptionResult.salt;
+    const key = await this.encryptionService.deriveKey(password, salt);
+    await this.encryptFolderContents(folder, key);
+
+    // Mark as unlocked in session
+    this.unlockedFolders.set(folder.path, key);
+  }
+
+  async encryptFolderContents(folder: TFolder, key: CryptoKey): Promise<void> {
+    for (const child of folder.children) {
+      if (child instanceof TFile) {
+        if (child.name === this.META_FILE_NAME) continue;
+        await this.encryptFile(child, key);
+      } else if (child instanceof TFolder) {
+        await this.encryptFolderContents(child, key);
+      }
+    }
+  }
+
+  async decryptFolderContents(folder: TFolder, key: CryptoKey): Promise<void> {
+    for (const child of folder.children) {
+      if (child instanceof TFile) {
+        if (child.name === this.META_FILE_NAME) continue;
+        await this.decryptFile(child, key);
+      } else if (child instanceof TFolder) {
+        await this.decryptFolderContents(child, key);
+      }
+    }
+  }
+
+  async encryptFile(file: TFile, key: CryptoKey): Promise<void> {
+    const data = await this.fileService.readBinary(file);
+    if (this.hasMagic(data)) return;
+
+    const result = await this.encryptionService.encryptWithKey(data, key);
+    const combined = this.combineBuffersWithMagic(result.iv, result.ciphertext);
+
+    // Securely replace plaintext with ciphertext
+    await this.fileService.secureWrite(file.path, combined);
+  }
+
+  async decryptFile(file: TFile, key: CryptoKey): Promise<void> {
+    const data = await this.fileService.readBinary(file);
+    if (!this.hasMagic(data)) return;
+
+    const { iv, ciphertext } = this.splitMagicBuffer(data);
+    try {
+      const plaintext = await this.encryptionService.decryptWithKey(ciphertext, key, iv);
+      await this.fileService.writeBinary(file.path, plaintext);
+    } catch (e) {
+      console.error(`Failed to decrypt file: ${file.path}`, e);
+    }
+  }
+
+  private readonly MAGIC = 'ENC!';
+  private readonly MAGIC_BYTES = new TextEncoder().encode(this.MAGIC);
+
+  private hasMagic(data: ArrayBuffer): boolean {
+    if (data.byteLength < 4) return false;
+    const view = new Uint8Array(data, 0, 4);
+    return (
+      view[0] === this.MAGIC_BYTES[0] &&
+      view[1] === this.MAGIC_BYTES[1] &&
+      view[2] === this.MAGIC_BYTES[2] &&
+      view[3] === this.MAGIC_BYTES[3]
+    );
+  }
+
+  private combineBuffersWithMagic(iv: Uint8Array, ciphertext: ArrayBuffer): ArrayBuffer {
+    const tmp = new Uint8Array(this.MAGIC_BYTES.length + iv.byteLength + ciphertext.byteLength);
+    tmp.set(this.MAGIC_BYTES, 0);
+    tmp.set(iv, this.MAGIC_BYTES.length);
+    tmp.set(new Uint8Array(ciphertext), this.MAGIC_BYTES.length + iv.byteLength);
+    return tmp.buffer;
+  }
+
+  private splitMagicBuffer(data: ArrayBuffer): { iv: Uint8Array; ciphertext: ArrayBuffer } {
+    const iv = new Uint8Array(data, this.MAGIC_BYTES.length, 12);
+    const ciphertext = data.slice(this.MAGIC_BYTES.length + 12);
+    return { iv, ciphertext };
   }
 
   private arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
@@ -64,6 +147,23 @@ export class FolderService {
   async isEncryptedFolder(folder: TFolder): Promise<boolean> {
     const metaPath = `${folder.path}/${this.META_FILE_NAME}`;
     return await this.fileService.exists(metaPath);
+  }
+
+  getEncryptedParent(file: TFile | TFolder): TFolder | null {
+    let parent = file.parent;
+    while (parent) {
+      // Check if this parent folder has the metadata file
+      const metaPath = `${parent.path}/${this.META_FILE_NAME}`;
+      if (this.fileService.getFile(metaPath)) {
+        return parent;
+      }
+      parent = parent.parent;
+    }
+    return null;
+  }
+
+  isInsideEncryptedFolder(file: TFile | TFolder): boolean {
+    return this.getEncryptedParent(file) !== null;
   }
 
   async unlockFolder(folder: TFolder, password: string): Promise<boolean> {
@@ -93,6 +193,10 @@ export class FolderService {
 
       if (resultStr === 'OBSIDIAN_ENCRYPTED_VERIFICATION') {
         this.unlockedFolders.set(folder.path, key);
+
+        // Decrypt all contents on disk for session
+        await this.decryptFolderContents(folder, key);
+
         return true;
       }
     } catch (e) {
@@ -102,8 +206,22 @@ export class FolderService {
     return false;
   }
 
-  lockFolder(folder: TFolder): void {
-    this.unlockedFolders.delete(folder.path);
+  async lockFolder(folder: TFolder): Promise<void> {
+    const key = this.unlockedFolders.get(folder.path);
+    if (key) {
+      await this.encryptFolderContents(folder, key);
+      this.unlockedFolders.delete(folder.path);
+    }
+  }
+
+  async lockAllFolders(): Promise<void> {
+    for (const [path, key] of this.unlockedFolders.entries()) {
+      const folder = this.app.vault.getAbstractFileByPath(path);
+      if (folder instanceof TFolder) {
+        await this.encryptFolderContents(folder, key);
+      }
+    }
+    this.unlockedFolders.clear();
   }
 
   isUnlocked(folder: TFolder): boolean {

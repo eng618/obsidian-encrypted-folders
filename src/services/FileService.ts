@@ -33,6 +33,28 @@ export class FileService {
   }
 
   /**
+   * Writes data to a file securely by overwriting with random data first if it exists.
+   *
+   * @param path The path to write to.
+   * @param data The data to write.
+   */
+  async secureWrite(path: string, data: ArrayBuffer): Promise<TFile> {
+    const normalizedPath = normalizePath(path);
+    const existingFile = this.vault.getAbstractFileByPath(normalizedPath);
+
+    if (existingFile instanceof TFile) {
+      const size = existingFile.stat.size;
+      const randomData = new Uint8Array(size);
+      window.crypto.getRandomValues(randomData as any);
+      await this.vault.modifyBinary(existingFile, randomData.buffer);
+      await this.vault.modifyBinary(existingFile, data);
+      return existingFile;
+    } else {
+      return await this.writeBinary(path, data);
+    }
+  }
+
+  /**
    * Deletes a file.
    *
    * @param file The file to delete.

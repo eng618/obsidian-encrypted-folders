@@ -25,7 +25,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
     // Initialize Services
     this.encryptionService = new EncryptionService();
     this.fileService = new FileService(this.app.vault);
-    this.folderService = new FolderService(this.encryptionService, this.fileService);
+    this.folderService = new FolderService(this.encryptionService, this.fileService, this.app);
 
     // Register File Menu Event
     this.registerEvent(
@@ -51,8 +51,8 @@ export default class EncryptedFoldersPlugin extends Plugin {
           item
             .setTitle('Lock Folder')
             .setIcon('lock')
-            .onClick(() => {
-              this.folderService.lockFolder(folder);
+            .onClick(async () => {
+              await this.folderService.lockFolder(folder);
               new Notice('Folder locked.');
             });
         });
@@ -88,7 +88,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
     }
   }
 
-  onunload() {}
+  onunload() {
+    this.folderService.lockAllFolders();
+  }
 
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
