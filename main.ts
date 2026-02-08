@@ -3,6 +3,7 @@ import { EncryptionService } from './src/services/EncryptionService';
 import { FileService } from './src/services/FileService';
 import { FolderService } from './src/services/FolderService';
 import { PasswordModal } from './src/ui/PasswordModal';
+import { RecoveryKeyModal } from './src/ui/RecoveryKeyModal';
 import { EncryptedFoldersSettingTab } from './src/ui/SettingsTab';
 
 interface EncryptedFoldersSettings {
@@ -72,6 +73,22 @@ export default class EncryptedFoldersPlugin extends Plugin {
               }).open();
             });
         });
+
+        menu.addItem((item) => {
+          item
+            .setTitle('Unlock with Recovery Key')
+            .setIcon('key')
+            .onClick(() => {
+              new PasswordModal(this.app, 'Enter Recovery Key', async (recoveryKey) => {
+                const success = await this.folderService.unlockFolder(folder, recoveryKey, true);
+                if (success) {
+                  new Notice('Folder unlocked with recovery key!');
+                } else {
+                  new Notice('Invalid recovery key.');
+                }
+              }).open();
+            });
+        });
       }
     } else {
       menu.addItem((item) => {
@@ -80,7 +97,8 @@ export default class EncryptedFoldersPlugin extends Plugin {
           .setIcon('lock')
           .onClick(() => {
             new PasswordModal(this.app, 'Encrypt Folder', async (password) => {
-              await this.folderService.createEncryptedFolder(folder, password);
+              const recoveryKey = await this.folderService.createEncryptedFolder(folder, password);
+              new RecoveryKeyModal(this.app, recoveryKey).open();
               new Notice('Folder encrypted!');
             }).open();
           });

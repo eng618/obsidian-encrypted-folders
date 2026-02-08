@@ -19,24 +19,40 @@ export class FolderService {
    * @param folder The folder to encrypt.
    * @param password The password for the folder.
    */
-  async createEncryptedFolder(folder: TFolder, password: string): Promise<void> {
+  async createEncryptedFolder(folder: TFolder, password: string): Promise<string> {
+    const recoveryKey = this.generateRecoveryKey();
+    const masterKey = await this.encryptionService.generateMasterKey();
+    const masterKeyRaw = await this.encryptionService.exportKey(masterKey);
+
+    // 1. Password wrapping
+    const salt = this.encryptionService.generateSalt();
+    const derivedKey = await this.encryptionService.deriveKey(password, salt);
+    const wrappedResult = await this.encryptionService.encryptWithKey(masterKeyRaw, derivedKey);
+
+    // 2. Recovery wrapping
+    const recoverySalt = this.encryptionService.generateSalt();
+    const recoveryDerivedKey = await this.encryptionService.deriveKey(recoveryKey, recoverySalt);
+    const recoveryWrappedResult = await this.encryptionService.encryptWithKey(masterKeyRaw, recoveryDerivedKey);
+
+    // 3. Test token (using the master key to verify we can decrypt later)
     const testPhrase = 'OBSIDIAN_ENCRYPTED_VERIFICATION';
     const encoder = new TextEncoder();
-    const data = encoder.encode(testPhrase);
-
-    const encryptionResult = await this.encryptionService.encrypt(data.buffer, password);
-
-    const combinedToken = this.combineBuffers(encryptionResult.iv, encryptionResult.ciphertext);
+    const testResult = await this.encryptionService.encryptWithKey(encoder.encode(testPhrase).buffer, masterKey);
+    const combinedToken = this.combineBuffers(testResult.iv, testResult.ciphertext);
 
     const metadata: FolderMetadata = {
       version: 1,
       id: window.crypto.randomUUID(),
       encryptionMethod: 'AES-256-GCM',
       kdfMethod: 'PBKDF2-SHA256',
-      salt: this.arrayBufferToBase64(encryptionResult.salt),
+      salt: this.arrayBufferToBase64(salt),
       iterations: 600000,
       lockFile: this.META_FILE_NAME,
       testToken: this.arrayBufferToBase64(combinedToken),
+      wrappedMasterKey: this.arrayBufferToBase64(wrappedResult.ciphertext),
+      masterKeyIV: this.arrayBufferToBase64(wrappedResult.iv),
+      recoverySalt: this.arrayBufferToBase64(recoverySalt),
+      wrappedMasterKeyRecovery: this.arrayBufferToBase64(recoveryWrappedResult.ciphertext),
     };
 
     const metaPath = `${folder.path}/${this.META_FILE_NAME}`;
@@ -45,12 +61,24 @@ export class FolderService {
     await this.fileService.writeBinary(metaPath, encoder2.encode(jsonString).buffer);
 
     // Initial encryption of contents
-    const salt = encryptionResult.salt;
-    const key = await this.encryptionService.deriveKey(password, salt);
-    await this.encryptFolderContents(folder, key);
+    await this.encryptFolderContents(folder, masterKey);
 
     // Mark as unlocked in session
-    this.unlockedFolders.set(folder.path, key);
+    this.unlockedFolders.set(folder.path, masterKey);
+
+    return recoveryKey;
+  }
+
+  private generateRecoveryKey(): string {
+    const charset = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Base57 (no 0, O, I, l)
+    let ret = '';
+    const bytes = new Uint8Array(32);
+    window.crypto.getRandomValues(bytes);
+    for (let i = 0; i < 32; i++) {
+      ret += charset.charAt(bytes[i] % charset.length);
+      if ((i + 1) % 8 === 0 && i < 31) ret += '-';
+    }
+    return ret;
   }
 
   async encryptFolderContents(folder: TFolder, key: CryptoKey): Promise<void> {
@@ -166,7 +194,7 @@ export class FolderService {
     return this.getEncryptedParent(file) !== null;
   }
 
-  async unlockFolder(folder: TFolder, password: string): Promise<boolean> {
+  async unlockFolder(folder: TFolder, secret: string, isRecovery = false): Promise<boolean> {
     const metaPath = `${folder.path}/${this.META_FILE_NAME}`;
     const metaFile = this.fileService.getFile(metaPath);
     if (!metaFile) return false;
@@ -175,32 +203,35 @@ export class FolderService {
     const contentStr = new TextDecoder().decode(contentBuffer);
     const metadata: FolderMetadata = JSON.parse(contentStr);
 
-    // 1. Derive key using salt from metadata
-    const salt = new Uint8Array(this.base64ToArrayBuffer(metadata.salt));
-    const key = await this.encryptionService.deriveKey(password, salt);
-
-    // 2. Decrypt testToken
-    const tokenData = new Uint8Array(this.base64ToArrayBuffer(metadata.testToken));
-
-    // Token format: IV (12 bytes) + Ciphertext
-    const iv = tokenData.slice(0, 12);
-    const ciphertext = tokenData.slice(12);
-
     try {
-      // We use the derived key to try to decrypt the known token
-      const resultBuffer = await this.encryptionService.decryptWithKey(ciphertext.buffer, key, iv);
+      // 1. Derive key from password/recovery key
+      const salt = new Uint8Array(this.base64ToArrayBuffer(isRecovery ? metadata.recoverySalt! : metadata.salt));
+      const derivedKey = await this.encryptionService.deriveKey(secret, salt);
+
+      // 2. Unwrap master key
+      const wrappedMK = new Uint8Array(
+        this.base64ToArrayBuffer(isRecovery ? metadata.wrappedMasterKeyRecovery! : metadata.wrappedMasterKey),
+      );
+      const mkIV = new Uint8Array(this.base64ToArrayBuffer(metadata.masterKeyIV));
+
+      const masterKeyRaw = await this.encryptionService.decryptWithKey(wrappedMK.buffer, derivedKey, mkIV);
+      const masterKey = await this.encryptionService.importKey(masterKeyRaw);
+
+      // 3. Verify master key with testToken
+      const tokenData = new Uint8Array(this.base64ToArrayBuffer(metadata.testToken));
+      const iv = tokenData.slice(0, 12);
+      const ciphertext = tokenData.slice(12);
+
+      const resultBuffer = await this.encryptionService.decryptWithKey(ciphertext.buffer, masterKey, iv);
       const resultStr = new TextDecoder().decode(resultBuffer);
 
       if (resultStr === 'OBSIDIAN_ENCRYPTED_VERIFICATION') {
-        this.unlockedFolders.set(folder.path, key);
-
-        // Decrypt all contents on disk for session
-        await this.decryptFolderContents(folder, key);
-
+        this.unlockedFolders.set(folder.path, masterKey);
+        await this.decryptFolderContents(folder, masterKey);
         return true;
       }
     } catch (e) {
-      console.warn('Decryption failed for folder:', folder.path);
+      console.warn('Unlock failed for folder:', folder.path, e);
     }
 
     return false;

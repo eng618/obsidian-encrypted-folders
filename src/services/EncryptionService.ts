@@ -16,6 +16,9 @@ export interface IEncryptionService {
   deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>;
   encryptWithKey(data: ArrayBuffer, key: CryptoKey): Promise<EncryptionResult>;
   decryptWithKey(ciphertext: ArrayBuffer, key: CryptoKey, iv: Uint8Array): Promise<ArrayBuffer>;
+  generateMasterKey(): Promise<CryptoKey>;
+  exportKey(key: CryptoKey): Promise<ArrayBuffer>;
+  importKey(data: ArrayBuffer): Promise<CryptoKey>;
 }
 
 export class EncryptionService implements IEncryptionService {
@@ -91,5 +94,21 @@ export class EncryptionService implements IEncryptionService {
   async decrypt(ciphertext: ArrayBuffer, password: string, iv: Uint8Array, salt: Uint8Array): Promise<ArrayBuffer> {
     const derivedKey = await this.deriveKey(password, salt);
     return this.decryptWithKey(ciphertext, derivedKey, iv);
+  }
+
+  async generateMasterKey(): Promise<CryptoKey> {
+    return window.crypto.subtle.generateKey(
+      { name: 'AES-GCM', length: this.KEY_LENGTH },
+      true, // extractable
+      ['encrypt', 'decrypt'],
+    );
+  }
+
+  async exportKey(key: CryptoKey): Promise<ArrayBuffer> {
+    return window.crypto.subtle.exportKey('raw', key);
+  }
+
+  async importKey(data: ArrayBuffer): Promise<CryptoKey> {
+    return window.crypto.subtle.importKey('raw', data as any, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
   }
 }
