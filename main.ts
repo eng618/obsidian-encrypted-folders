@@ -28,11 +28,26 @@ export default class EncryptedFoldersPlugin extends Plugin {
     this.fileService = new FileService(this.app.vault);
     this.folderService = new FolderService(this.encryptionService, this.fileService, this.app);
 
-    // Register File Menu Event
     this.registerEvent(
       this.app.workspace.on('file-menu', (menu, file) => {
         if (file instanceof TFolder) {
           this.handleFolderMenu(menu, file);
+        }
+      }),
+    );
+
+    this.registerEvent(
+      this.app.vault.on('rename', (file, oldPath) => {
+        if (file instanceof TFolder) {
+          this.folderService.updatePath(oldPath, file.path);
+        }
+      }),
+    );
+
+    this.registerEvent(
+      this.app.vault.on('delete', (file) => {
+        if (file instanceof TFolder) {
+          this.folderService.removePath(file.path);
         }
       }),
     );

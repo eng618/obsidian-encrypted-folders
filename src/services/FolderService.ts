@@ -53,6 +53,7 @@ export class FolderService {
       masterKeyIV: this.arrayBufferToBase64(wrappedResult.iv),
       recoverySalt: this.arrayBufferToBase64(recoverySalt),
       wrappedMasterKeyRecovery: this.arrayBufferToBase64(recoveryWrappedResult.ciphertext),
+      recoveryIV: this.arrayBufferToBase64(recoveryWrappedResult.iv),
     };
 
     const metaPath = `${folder.path}/${this.META_FILE_NAME}`;
@@ -212,7 +213,7 @@ export class FolderService {
       const wrappedMK = new Uint8Array(
         this.base64ToArrayBuffer(isRecovery ? metadata.wrappedMasterKeyRecovery! : metadata.wrappedMasterKey),
       );
-      const mkIV = new Uint8Array(this.base64ToArrayBuffer(metadata.masterKeyIV));
+      const mkIV = new Uint8Array(this.base64ToArrayBuffer(isRecovery ? metadata.recoveryIV! : metadata.masterKeyIV));
 
       const masterKeyRaw = await this.encryptionService.decryptWithKey(wrappedMK.buffer, derivedKey, mkIV);
       const masterKey = await this.encryptionService.importKey(masterKeyRaw);
@@ -257,6 +258,18 @@ export class FolderService {
 
   isUnlocked(folder: TFolder): boolean {
     return this.unlockedFolders.has(folder.path);
+  }
+
+  updatePath(oldPath: string, newPath: string): void {
+    const key = this.unlockedFolders.get(oldPath);
+    if (key) {
+      this.unlockedFolders.set(newPath, key);
+      this.unlockedFolders.delete(oldPath);
+    }
+  }
+
+  removePath(path: string): void {
+    this.unlockedFolders.delete(path);
   }
 
   getUnlockedKey(folder: TFolder): CryptoKey | undefined {

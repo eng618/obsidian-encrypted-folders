@@ -17,6 +17,7 @@ export interface FolderMetadata {
   masterKeyIV: string; // IV for master key wrapping
   recoverySalt?: string; // Salt for recovery key KDF
   wrappedMasterKeyRecovery?: string; // Master key encrypted with recovery-derived key
+  recoveryIV?: string; // IV for recovery key wrapping
 }
 
 export interface FolderState {
