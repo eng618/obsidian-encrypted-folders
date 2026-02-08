@@ -1,7 +1,7 @@
 {
   "id": "obsidian-encrypted-folders",
   "name": "Encrypted Folders",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minAppVersion": "1.10.0",
   "description": "Obsidian plugin to encrypt folders within your vault.",
   "author": "Eric N. Garcia",
