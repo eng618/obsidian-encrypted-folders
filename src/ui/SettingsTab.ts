@@ -32,7 +32,8 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
       .setName('Active Session')
       .setDesc('Any folders unlocked in this session will be listed here.')
       .then((s) => {
-        const unlocked = Array.from((this.plugin.folderService as any).unlockedFolders.keys());
+        const folderService = this.plugin.folderService as unknown as { unlockedFolders: Map<string, CryptoKey> };
+        const unlocked = Array.from(folderService.unlockedFolders.keys());
         if (unlocked.length === 0) {
           s.setDesc('No folders are currently unlocked.');
         } else {

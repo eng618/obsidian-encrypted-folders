@@ -8,6 +8,6 @@ export default [
   ...recommended,
   // Add project-specific overrides here
   {
-    ignores: ['eslint.config.mjs'],
+    ignores: ['eslint.config.mjs', 'main.js', 'node_modules/**', '.yarn/**'],
   },
 ];

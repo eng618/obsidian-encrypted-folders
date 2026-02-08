@@ -16,7 +16,7 @@ export class PasswordModal extends Modal {
     contentEl.empty();
     contentEl.createEl('h2', { text: this.title });
 
-    const passwordSetting = new Setting(contentEl).setName('Password').addText((text) => {
+    new Setting(contentEl).setName('Password').addText((text) => {
       text.setPlaceholder('Enter password').onChange((value) => (this.password = value));
       text.inputEl.type = 'password';
       text.inputEl.focus();

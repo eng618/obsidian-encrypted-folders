@@ -45,7 +45,7 @@ export class FileService {
     if (existingFile instanceof TFile) {
       const size = existingFile.stat.size;
       const randomData = new Uint8Array(size);
-      window.crypto.getRandomValues(randomData as any);
+      window.crypto.getRandomValues(randomData as unknown as Uint8Array);
       await this.vault.modifyBinary(existingFile, randomData.buffer);
       await this.vault.modifyBinary(existingFile, data);
       return existingFile;
@@ -71,7 +71,7 @@ export class FileService {
   async shredFile(file: TFile): Promise<void> {
     const size = file.stat.size;
     const randomData = new Uint8Array(size);
-    window.crypto.getRandomValues(randomData as any);
+    window.crypto.getRandomValues(randomData as unknown as Uint8Array);
     await this.vault.modifyBinary(file, randomData.buffer);
     await this.vault.delete(file); // Permanent delete
   }

@@ -27,11 +27,11 @@ export class EncryptionService implements IEncryptionService {
   private readonly DIGEST = 'SHA-256';
 
   generateSalt(length = 16): Uint8Array {
-    return window.crypto.getRandomValues(new Uint8Array(length) as any);
+    return window.crypto.getRandomValues(new Uint8Array(length));
   }
 
   generateIV(length = 12): Uint8Array {
-    return window.crypto.getRandomValues(new Uint8Array(length) as any);
+    return window.crypto.getRandomValues(new Uint8Array(length));
   }
 
   private async importPassword(password: string): Promise<CryptoKey> {
@@ -44,6 +44,7 @@ export class EncryptionService implements IEncryptionService {
     return window.crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         salt: salt as any,
         iterations: this.ITERATIONS,
         hash: this.DIGEST,
@@ -60,9 +61,11 @@ export class EncryptionService implements IEncryptionService {
     const ciphertext = await window.crypto.subtle.encrypt(
       {
         name: 'AES-GCM',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         iv: iv as any,
       },
       key,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       data as any,
     );
     return {
@@ -76,9 +79,11 @@ export class EncryptionService implements IEncryptionService {
     return window.crypto.subtle.decrypt(
       {
         name: 'AES-GCM',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         iv: iv as any,
       },
       key,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ciphertext as any,
     );
   }
@@ -109,6 +114,7 @@ export class EncryptionService implements IEncryptionService {
   }
 
   async importKey(data: ArrayBuffer): Promise<CryptoKey> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return window.crypto.subtle.importKey('raw', data as any, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
   }
 }
