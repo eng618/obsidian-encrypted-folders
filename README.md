@@ -60,6 +60,15 @@ npm run build # Production build
 npm run lint  # Linting and type checking
 ```
 
+## 📚 Documentation
+
+- [Technical Walkthrough](./docs/WALKTHROUGH.md) - Deep dive into how it works.
+- [Development Plan](./docs/DEVELOPMENT_PLAN.md) - Roadmap and project status.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+
 ## 📄 License
 
 MIT License. See `LICENSE` for details.

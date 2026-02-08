@@ -1,0 +1,15 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "obsidian-encrypted-folders",
+      "initial-version": "1.0.0",
+      "extra-files": ["manifest.json"]
+    }
+  },
+  "plugins": [
+    {
+      "type": "sentence-case"
+    }
+  ]
+}

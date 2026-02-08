@@ -1,0 +1,46 @@
+name: release-please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # The following steps run when a release is created by release-please
+      - uses: actions/checkout@v4
+        if: ${{ steps.release.outputs.release_created }}
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        if: ${{ steps.release.outputs.release_created }}
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        if: ${{ steps.release.outputs.release_created }}
+        run: npm install --legacy-peer-deps
+
+      - name: Build
+        if: ${{ steps.release.outputs.release_created }}
+        run: npm run build
+
+      - name: Upload Release Artifacts
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag_name=${{ steps.release.outputs.tag_name }}
+          gh release upload $tag_name main.js manifest.json styles.css --clobber
