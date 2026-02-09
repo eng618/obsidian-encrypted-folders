@@ -1,4 +1,6 @@
 # Obsidian Encrypted Folders
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders?ref=badge_shield)
+
 
 A secure, recursive folder encryption plugin for Obsidian. Protect entire directories within your vault with industrial-grade encryption while maintaining full compatibility with Obsidian features like Search and Graph while unlocked.
 
@@ -85,6 +87,9 @@ Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for g
 ## 📄 License
 
 MIT License. See `LICENSE` for details.
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders?ref=badge_large)
 
 ## 🤝 Author
 
