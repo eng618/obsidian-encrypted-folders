@@ -92,6 +92,8 @@ Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for g
 
 MIT License. See `LICENSE` for details.
 
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders.svg?type=large&issueType=license)](https://app.fossa.com/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders?ref=badge_large&issueType=license)
+
 ## 🤝 Author
 
 **Eric N. Garcia** - [eng618@garciaericn.com](mailto:eng618@garciaericn.com)
