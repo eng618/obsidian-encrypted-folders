@@ -35,7 +35,6 @@ data.json
 # Test Vault
 TestVault/.obsidian/*
 TestVault/*/obsidian-folder-meta.json
-TestVault/*/config.json
 
 # Coverage
 coverage/
