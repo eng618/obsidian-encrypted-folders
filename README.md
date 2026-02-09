@@ -2,6 +2,14 @@
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders?ref=badge_shield)
 
 
+[![GitHub Release](https://img.shields.io/github/v/release/eng618/obsidian-encrypted-folders?style=flat-square)](https://github.com/eng618/obsidian-encrypted-folders/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/eng618/obsidian-encrypted-folders/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/eng618/obsidian-encrypted-folders/actions/workflows/ci.yml)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/0e0baf5377694cc69afdad1e887e0380)](https://app.codacy.com/gh/ENG618/obsidian-encrypted-folders/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+[![Codacy Coverage](https://app.codacy.com/project/badge/Coverage/0e0baf5377694cc69afdad1e887e0380)](https://app.codacy.com/gh/ENG618/obsidian-encrypted-folders/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_coverage)
+[![Obsidian Downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json&query=%24%5B%22obsidian-encrypted-folders%22%5D.downloads&logo=obsidian&logoColor=white&label=downloads&color=purple&style=flat-square)](https://obsidian.md/plugins?id=obsidian-encrypted-folders)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders.svg?type=shield&issueType=license)](https://app.fossa.com/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders?ref=badge_shield&issueType=license)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+
 A secure, recursive folder encryption plugin for Obsidian. Protect entire directories within your vault with industrial-grade encryption while maintaining full compatibility with Obsidian features like Search and Graph while unlocked.
 
 ## ✨ Features
@@ -88,8 +96,12 @@ Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for g
 
 MIT License. See `LICENSE` for details.
 
+<<<<<<< add-license-scan-badge
 
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders?ref=badge_large)
+=======
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders.svg?type=large&issueType=license)](https://app.fossa.com/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders?ref=badge_large&issueType=license)
+>>>>>>> main
 
 ## 🤝 Author
 
