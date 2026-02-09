@@ -33,8 +33,14 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Run Tests
-        run: npm test
+      - name: Run Tests with Coverage
+        run: npm run test:coverage
+
+      - name: Report Coverage to Codacy
+        uses: codacy/codacy-coverage-reporter-action@v1
+        with:
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+          coverage-reports: coverage/lcov.info
 
       - name: Build
         run: npm run build

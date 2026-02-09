@@ -6,4 +6,8 @@ module.exports = {
     '^obsidian$': '<rootDir>/src/test/mocks/obsidian.ts',
   },
   setupFilesAfterEnv: ['<rootDir>/src/test/setup.ts'],
+  collectCoverage: true,
+  coverageDirectory: 'coverage',
+  coverageReporters: ['text', 'lcov', 'clover'],
+  collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/*.d.ts', '!src/test/**', '!src/main.ts'],
 };

@@ -33,15 +33,32 @@ export class Vault {
     }
     const file = new TFile();
     file.path = path;
-    file.name = path.split('/').pop() || '';
+    const parts = path.split('/');
+    file.name = parts.pop() || '';
     file.data = data;
     file.stat = { size: data.byteLength, mtime: Date.now(), ctime: Date.now() };
+
+    // Link to parent
+    const parentPath = parts.join('/');
+    if (parentPath) {
+      const parent = this.files.get(parentPath);
+      if (parent instanceof TFolder) {
+        file.parent = parent;
+        if (!parent.children.includes(file)) {
+          parent.children.push(file);
+        }
+      }
+    }
+
     this.files.set(path, file);
     return file;
   });
 
-  delete = jest.fn(async (file: TFile) => {
+  delete = jest.fn(async (file: TFile | TFolder) => {
     this.files.delete(file.path);
+    if (file.parent) {
+      file.parent.children = file.parent.children.filter((c) => c !== file);
+    }
   });
 
   trash = jest.fn();

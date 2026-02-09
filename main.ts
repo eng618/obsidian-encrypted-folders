@@ -4,6 +4,7 @@ import { FileService } from './src/services/FileService';
 import { FolderService } from './src/services/FolderService';
 import { PasswordModal } from './src/ui/PasswordModal';
 import { RecoveryKeyModal } from './src/ui/RecoveryKeyModal';
+import { RemovalModal } from './src/ui/RemovalModal';
 import { EncryptedFoldersSettingTab } from './src/ui/SettingsTab';
 
 interface EncryptedFoldersSettings {
@@ -111,22 +112,54 @@ export default class EncryptedFoldersPlugin extends Plugin {
             });
         });
       }
+
+      menu.addSeparator();
+      menu.addItem((item) => {
+        item
+          .setTitle('Permanently Decrypt Folder')
+          .setIcon('trash-2')
+          .onClick(async () => {
+            const isLocked = !this.folderService.isUnlocked(folder);
+            new RemovalModal(this.app, isLocked, async (password) => {
+              try {
+                const success = await this.folderService.removeEncryption(folder, password);
+                if (success) {
+                  new Notice('Encryption removed. Folder is now plaintext.');
+                } else if (isLocked) {
+                  new Notice('Incorrect password.');
+                }
+              } catch (e) {
+                new Notice(`Removal failed: ${e.message}`);
+              }
+            }).open();
+          });
+      });
     } else {
+      // Don't allow encrypting nested folders if a parent is already encrypted
+      if (this.folderService.isInsideEncryptedFolder(folder)) {
+        return;
+      }
+
       menu.addItem((item) => {
         item
           .setTitle('Encrypt Folder')
           .setIcon('lock')
           .onClick(() => {
-            new PasswordModal(this.app, 'Encrypt Folder', async (password, lockImmediately) => {
-              const recoveryKey = await this.folderService.createEncryptedFolder(folder, password, lockImmediately);
-              new RecoveryKeyModal(this.app, recoveryKey).open();
+            new PasswordModal(
+              this.app,
+              'Encrypt Folder',
+              async (password, lockImmediately) => {
+                const recoveryKey = await this.folderService.createEncryptedFolder(folder, password, lockImmediately);
+                new RecoveryKeyModal(this.app, recoveryKey).open();
 
-              if (lockImmediately) {
-                new Notice('Folder encrypted and locked.');
-              } else {
-                new Notice('Folder initialized. Ready for encryption.');
-              }
-            }).open();
+                if (lockImmediately) {
+                  new Notice('Folder encrypted and locked.');
+                } else {
+                  new Notice('Folder initialized. Ready for encryption.');
+                }
+              },
+              true,
+            ).open();
           });
       });
     }

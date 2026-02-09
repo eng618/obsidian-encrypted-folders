@@ -8,6 +8,7 @@ export class PasswordModal extends Modal {
     app: App,
     private title: string,
     private onSubmit: (password: string, lockImmediately?: boolean) => void,
+    private showLockToggle = false,
   ) {
     super(app);
   }
@@ -30,7 +31,7 @@ export class PasswordModal extends Modal {
       text.inputEl.focus();
     });
 
-    if (this.title.includes('Encrypt')) {
+    if (this.showLockToggle) {
       new Setting(contentEl)
         .setName('Lock immediately')
         .setDesc('Encrypt and hide files now')
@@ -76,7 +77,7 @@ export class PasswordModal extends Modal {
   }
 
   private submit() {
-    if (this.title.includes('Encrypt') && this.password.length < 8) {
+    if (this.showLockToggle && this.password.length < 8) {
       return; // Enforce for encryption
     }
     this.close();
