@@ -1,6 +1,7 @@
 {
   "name": "obsidian-encrypted-folders",
   "version": "1.1.0",
+  "private": true,
   "description": "Obsidian plugin to encrypt folders within your vault.",
   "keywords": [
     "obsidian",
@@ -10,7 +11,8 @@
   ],
   "license": "MIT",
   "author": "Eric N. Garcia <eng618@garciaericn.com>",
-  "main": "main.js",
+  "type": "commonjs",
+  "main": "dist/main.js",
   "scripts": {
     "build": "vite build",
     "dev": "vite",
