@@ -37,6 +37,7 @@ jobs:
         run: npm run test:coverage
 
       - name: Report Coverage to Codacy
+        if: github.event_name == 'push'
         uses: codacy/codacy-coverage-reporter-action@v1
         with:
           project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
