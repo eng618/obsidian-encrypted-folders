@@ -29,7 +29,7 @@ By participating in this project, you agree to abide by our code of conduct. Ple
 - **Lint**: `npm run lint`
 - **Test**: `npm test`
 
-We use **Jest** for testing and **ESLint** with **Prettier** for code quality. Please ensure your changes pass all checks before submitting a Pull Request.
+We use **Vitest** for testing and **ESLint** with **Prettier** for code quality. Please ensure your changes pass all checks before submitting a Pull Request.
 
 ## 🧪 Testing Guidelines
 

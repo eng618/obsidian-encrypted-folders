@@ -49,9 +49,9 @@ jobs:
           tag_name=${{ steps.release.outputs.tag_name }}
           # Upload required files for Obsidian plugin
           files=()
-          [ -f main.js ] && files+=("main.js")
+          [ -f dist/main.js ] && files+=("dist/main.js")
           [ -f manifest.json ] && files+=("manifest.json")
-          [ -f styles.css ] && files+=("styles.css")
+          [ -f dist/styles.css ] && files+=("dist/styles.css")
 
           if [ ${#files[@]} -gt 0 ]; then
             gh release upload "$tag_name" "${files[@]}" --clobber

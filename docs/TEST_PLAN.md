@@ -22,9 +22,9 @@ To test the plugin, you must link your development build to an Obsidian vault.
 
    ```bash
    mkdir -p TestVault/.obsidian/plugins/obsidian-encrypted-folders
-   ln -sf $(pwd)/main.js TestVault/.obsidian/plugins/obsidian-encrypted-folders/main.js
+   ln -sf $(pwd)/dist/main.js TestVault/.obsidian/plugins/obsidian-encrypted-folders/main.js
    ln -sf $(pwd)/manifest.json TestVault/.obsidian/plugins/obsidian-encrypted-folders/manifest.json
-   ln -sf $(pwd)/styles.css TestVault/.obsidian/plugins/obsidian-encrypted-folders/styles.css
+   ln -sf $(pwd)/dist/styles.css TestVault/.obsidian/plugins/obsidian-encrypted-folders/styles.css
    ```
 
 3. **Enable Plugin**:
