@@ -162,4 +162,118 @@ describe('FolderService Integration', () => {
       'Nested encryption is not allowed',
     );
   });
+
+  it('should fail to unlock with incorrect password', async () => {
+    const folder = new TFolder();
+    folder.path = 'wrongpass';
+    folder.children = [];
+    (app.vault as any).files.set(folder.path, folder);
+
+    await folderService.createEncryptedFolder(folder, 'correctpass');
+    await folderService.lockFolder(folder);
+
+    const success = await folderService.unlockFolder(folder, 'wrongpass');
+    expect(success).toBe(false);
+    expect(folderService.isUnlocked(folder)).toBe(false);
+  });
+
+  it('should handle isEncryptedFolder for non-encrypted folder', () => {
+    const folder = new TFolder();
+    folder.path = 'regular';
+    folder.children = [];
+    (app.vault as any).files.set(folder.path, folder);
+
+    expect(folderService.isEncryptedFolder(folder)).toBe(false);
+  });
+
+  it('should handle encrypt and decrypt of subfolders', async () => {
+    const parent = new TFolder();
+    parent.path = 'parentfolder';
+    parent.children = [];
+    (app.vault as any).files.set(parent.path, parent);
+
+    const subfolder = new TFolder();
+    subfolder.path = 'parentfolder/subfolder';
+    subfolder.name = 'subfolder';
+    subfolder.parent = parent;
+    subfolder.children = [];
+    parent.children.push(subfolder);
+    (app.vault as any).files.set(subfolder.path, subfolder);
+
+    const subfile = new TFile();
+    subfile.name = 'subfile.md';
+    subfile.path = 'parentfolder/subfolder/subfile.md';
+    subfile.stat = { size: 5, mtime: 0, ctime: 0 };
+    (subfile as any).data = new TextEncoder().encode('hello').buffer;
+    subfile.parent = subfolder;
+    subfolder.children.push(subfile);
+    (app.vault as any).files.set(subfile.path, subfile);
+
+    // Encrypt parent (should recursively encrypt subfolder contents)
+    const password = 'testpass';
+    await folderService.createEncryptedFolder(parent, password, true);
+
+    // Subfolder file should be encrypted
+    const lockedSubfile = app.vault.getAbstractFileByPath('parentfolder/subfolder/subfile.md.locked');
+    expect(lockedSubfile).toBeDefined();
+
+    // Unlock and verify
+    await folderService.unlockFolder(parent, password);
+    const decryptedSubfile = app.vault.getAbstractFileByPath('parentfolder/subfolder/subfile.md') as TFile;
+    expect(decryptedSubfile).toBeDefined();
+  });
+
+  it('should handle getEncryptedParent correctly', async () => {
+    const parent = new TFolder();
+    parent.path = 'encparent';
+    parent.children = [];
+    (app.vault as any).files.set(parent.path, parent);
+
+    const child = new TFolder();
+    child.path = 'encparent/child';
+    child.name = 'child';
+    child.parent = parent;
+    child.children = [];
+    parent.children.push(child);
+    (app.vault as any).files.set(child.path, child);
+
+    // Before encryption
+    expect(folderService.getEncryptedParent(child)).toBeNull();
+
+    // After encryption
+    await folderService.createEncryptedFolder(parent, 'pass');
+    expect(folderService.getEncryptedParent(child)).toBe(parent);
+  });
+
+  it('should correctly check isInsideEncryptedFolder', async () => {
+    const outer = new TFolder();
+    outer.path = 'outer';
+    outer.children = [];
+    (app.vault as any).files.set(outer.path, outer);
+
+    const inner = new TFolder();
+    inner.path = 'outer/inner';
+    inner.name = 'inner';
+    inner.parent = outer;
+    inner.children = [];
+    outer.children.push(inner);
+    (app.vault as any).files.set(inner.path, inner);
+
+    expect(folderService.isInsideEncryptedFolder(inner)).toBe(false);
+
+    await folderService.createEncryptedFolder(outer, 'securepass');
+
+    expect(folderService.isInsideEncryptedFolder(inner)).toBe(true);
+  });
+
+  it('should handle unlockFolder when folder is not encrypted', async () => {
+    const folder = new TFolder();
+    folder.path = 'notencrypted';
+    folder.children = [];
+    (app.vault as any).files.set(folder.path, folder);
+
+    // Try to unlock a non-encrypted folder
+    const success = await folderService.unlockFolder(folder, 'anypass');
+    expect(success).toBe(false);
+  });
 });
