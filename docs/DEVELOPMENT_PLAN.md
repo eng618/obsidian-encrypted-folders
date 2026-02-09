@@ -9,7 +9,7 @@ This document outlines the comprehensive development plan for implementing the "
 - ✅ Project structure initialized
 - ✅ Basic Obsidian plugin template in place
 - ✅ TypeScript configuration set up
-- ✅ Build system (esbuild) configured
+- ✅ Build system (Vite) configured
 - ✅ Core encryption functionality implemented (AES-256-GCM)
 - ✅ UI components for folder encryption created
 - ✅ Settings interface developed
@@ -140,7 +140,7 @@ This document outlines the comprehensive development plan for implementing the "
 - [x] Test complete encryption/decryption workflows
 - [x] Validate Obsidian integration points
 - [x] Test settings persistence and restoration
-- [x] Verify cross-platform functionality (via Jest environment)
+- [x] Verify cross-platform functionality (via Vitest environment)
 
 ### 6.3 Security Testing
 

@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 export class TFile {
   path: string;
   name: string;
@@ -15,16 +16,16 @@ export class TFolder {
 export class Vault {
   files: Map<string, TFile | TFolder> = new Map();
 
-  readBinary = jest.fn(async (file: TFile) => {
+  readBinary = vi.fn(async (file: TFile) => {
     return file.data || new ArrayBuffer(0);
   });
 
-  modifyBinary = jest.fn(async (file: TFile, data: ArrayBuffer) => {
+  modifyBinary = vi.fn(async (file: TFile, data: ArrayBuffer) => {
     file.data = data;
     file.stat.size = data.byteLength;
   });
 
-  createBinary = jest.fn(async (path: string, data: ArrayBuffer) => {
+  createBinary = vi.fn(async (path: string, data: ArrayBuffer) => {
     const existing = this.files.get(path);
     if (existing instanceof TFile) {
       existing.data = data;
@@ -54,16 +55,16 @@ export class Vault {
     return file;
   });
 
-  delete = jest.fn(async (file: TFile | TFolder) => {
+  delete = vi.fn(async (file: TFile | TFolder) => {
     this.files.delete(file.path);
     if (file.parent) {
       file.parent.children = file.parent.children.filter((c) => c !== file);
     }
   });
 
-  trash = jest.fn();
+  trash = vi.fn();
 
-  getAbstractFileByPath = jest.fn((path: string) => {
+  getAbstractFileByPath = vi.fn((path: string) => {
     return this.files.get(path) || null;
   });
 }
@@ -77,7 +78,7 @@ export class Notice {
 export class App {
   vault: Vault;
   workspace = {
-    on: jest.fn(),
+    on: vi.fn(),
   };
   constructor() {
     this.vault = new Vault();
