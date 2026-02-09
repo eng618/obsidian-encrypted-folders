@@ -2,6 +2,7 @@ import { Menu, Notice, Plugin, TFolder } from 'obsidian';
 import { EncryptionService } from './src/services/EncryptionService';
 import { FileService } from './src/services/FileService';
 import { FolderService } from './src/services/FolderService';
+import { ConfirmationModal } from './src/ui/ConfirmationModal';
 import { PasswordModal } from './src/ui/PasswordModal';
 import { RecoveryKeyModal } from './src/ui/RecoveryKeyModal';
 import { EncryptedFoldersSettingTab } from './src/ui/SettingsTab';
@@ -111,7 +112,49 @@ export default class EncryptedFoldersPlugin extends Plugin {
             });
         });
       }
+
+      menu.addSeparator();
+      menu.addItem((item) => {
+        item
+          .setTitle('Permanently Decrypt Folder')
+          .setIcon('trash-2')
+          .onClick(async () => {
+            if (this.folderService.isUnlocked(folder)) {
+              new ConfirmationModal(
+                this.app,
+                'Remove Encryption',
+                'This will permanently remove encryption from this folder and restore it to a normal folder. This action cannot be undone.',
+                async () => {
+                  try {
+                    await this.folderService.removeEncryption(folder);
+                    new Notice('Encryption removed. Folder is now plaintext.');
+                  } catch (e) {
+                    new Notice(`Removal failed: ${e.message}`);
+                  }
+                },
+              ).open();
+            } else {
+              new PasswordModal(this.app, 'Enter Password to Remove Encryption', async (password) => {
+                try {
+                  const success = await this.folderService.removeEncryption(folder, password);
+                  if (success) {
+                    new Notice('Encryption removed. Folder is now plaintext.');
+                  } else {
+                    new Notice('Incorrect password.');
+                  }
+                } catch (e) {
+                  new Notice(`Removal failed: ${e.message}`);
+                }
+              }).open();
+            }
+          });
+      });
     } else {
+      // Don't allow encrypting nested folders if a parent is already encrypted
+      if (this.folderService.isInsideEncryptedFolder(folder)) {
+        return;
+      }
+
       menu.addItem((item) => {
         item
           .setTitle('Encrypt Folder')

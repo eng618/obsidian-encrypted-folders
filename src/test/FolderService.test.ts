@@ -113,4 +113,30 @@ describe('FolderService Integration', () => {
     expect(folderService.isUnlocked(folder1)).toBe(false);
     expect(folderService.isUnlocked(folder2)).toBe(false);
   });
+
+  it('should permanently remove encryption', async () => {
+    const folder = new TFolder();
+    folder.path = 'to-be-decrypted';
+    folder.children = [];
+    (app.vault as any).files.set(folder.path, folder);
+
+    const password = 'password123';
+    await folderService.createEncryptedFolder(folder, password, true);
+
+    // Verify it is encrypted and locked
+    expect(folderService.isEncryptedFolder(folder)).toBe(true);
+    expect(folderService.isUnlocked(folder)).toBe(false);
+    expect((app.vault as any).files.has(`${folder.path}/obsidian-folder-meta.json`)).toBe(true);
+
+    // Remove encryption
+    const success = await folderService.removeEncryption(folder, password);
+
+    expect(success).toBe(true);
+    expect(folderService.isEncryptedFolder(folder)).toBe(false);
+    expect(folderService.isUnlocked(folder)).toBe(false);
+
+    // Metadata should be gone
+    expect((app.vault as any).files.has(`${folder.path}/obsidian-folder-meta.json`)).toBe(false);
+    expect((app.vault as any).files.has(`${folder.path}/README_ENCRYPTED.md`)).toBe(false);
+  });
 });

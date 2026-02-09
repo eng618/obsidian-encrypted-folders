@@ -112,9 +112,3 @@ Ensure the plugin core surface area is functional.
 - **Deep Nesting**: Test a folder structure 5+ levels deep. Ensure all sub-files are encrypted.
 - **Special Characters**: Use folders/files with emojis or non-LATIN characters in names.
 - **ReadOnly Files**: Attempt to encrypt a folder containing files without write permissions. Verify graceful error handling.
-
----
-
-## 📋 Personal Notes
-
-- [ ] Recovery key - Xmogfvvr-mgApTfG8-KQFqAiyQ-RDv5KHar

@@ -407,6 +407,44 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     return this.unlockedFolders.get(folder.path);
   }
 
+  async removeEncryption(folder: TFolder, password?: string, isRecovery = false): Promise<boolean> {
+    // 1. If folder is locked, we must unlock it first to restore plaintext files
+    if (!this.isUnlocked(folder)) {
+      if (!password) {
+        throw new Error('Password is required to decrypt and remove encryption.');
+      }
+      const unlocked = await this.unlockFolder(folder, password, isRecovery);
+      if (!unlocked) return false;
+    }
+
+    // 2. Folder is now unlocked (plaintext files on disk). Clean up metadata.
+    const metaPath = `${folder.path}/${this.META_FILE_NAME}`;
+    const metaFile = this.fileService.getFile(metaPath);
+    if (metaFile) {
+      await this.app.vault.delete(metaFile);
+    }
+
+    // Also check for legacy meta file
+    const oldMetaPath = `${folder.path}/${this.OLD_META_FILE_NAME}`;
+    const oldMetaFile = this.fileService.getFile(oldMetaPath);
+    if (oldMetaFile) {
+      await this.app.vault.delete(oldMetaFile);
+    }
+
+    // Delete readme if it hasn't been deleted by unlockFolder already
+    const readmePath = `${folder.path}/${this.README_FILE_NAME}`;
+    const readmeFile = this.fileService.getFile(readmePath);
+    if (readmeFile) {
+      await this.app.vault.delete(readmeFile);
+    }
+
+    // 3. Clear caches
+    this.unlockedFolders.delete(folder.path);
+    this.encryptedFolders.delete(folder.path);
+
+    return true;
+  }
+
   private base64ToArrayBuffer(base64: string): ArrayBuffer {
     const binary_string = window.atob(base64);
     const len = binary_string.length;
