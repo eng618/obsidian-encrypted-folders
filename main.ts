@@ -2,9 +2,9 @@ import { Menu, Notice, Plugin, TFolder } from 'obsidian';
 import { EncryptionService } from './src/services/EncryptionService';
 import { FileService } from './src/services/FileService';
 import { FolderService } from './src/services/FolderService';
-import { ConfirmationModal } from './src/ui/ConfirmationModal';
 import { PasswordModal } from './src/ui/PasswordModal';
 import { RecoveryKeyModal } from './src/ui/RecoveryKeyModal';
+import { RemovalModal } from './src/ui/RemovalModal';
 import { EncryptedFoldersSettingTab } from './src/ui/SettingsTab';
 
 interface EncryptedFoldersSettings {
@@ -119,34 +119,19 @@ export default class EncryptedFoldersPlugin extends Plugin {
           .setTitle('Permanently Decrypt Folder')
           .setIcon('trash-2')
           .onClick(async () => {
-            if (this.folderService.isUnlocked(folder)) {
-              new ConfirmationModal(
-                this.app,
-                'Remove Encryption',
-                'This will permanently remove encryption from this folder and restore it to a normal folder. This action cannot be undone.',
-                async () => {
-                  try {
-                    await this.folderService.removeEncryption(folder);
-                    new Notice('Encryption removed. Folder is now plaintext.');
-                  } catch (e) {
-                    new Notice(`Removal failed: ${e.message}`);
-                  }
-                },
-              ).open();
-            } else {
-              new PasswordModal(this.app, 'Enter Password to Remove Encryption', async (password) => {
-                try {
-                  const success = await this.folderService.removeEncryption(folder, password);
-                  if (success) {
-                    new Notice('Encryption removed. Folder is now plaintext.');
-                  } else {
-                    new Notice('Incorrect password.');
-                  }
-                } catch (e) {
-                  new Notice(`Removal failed: ${e.message}`);
+            const isLocked = !this.folderService.isUnlocked(folder);
+            new RemovalModal(this.app, isLocked, async (password) => {
+              try {
+                const success = await this.folderService.removeEncryption(folder, password);
+                if (success) {
+                  new Notice('Encryption removed. Folder is now plaintext.');
+                } else if (isLocked) {
+                  new Notice('Incorrect password.');
                 }
-              }).open();
-            }
+              } catch (e) {
+                new Notice(`Removal failed: ${e.message}`);
+              }
+            }).open();
           });
       });
     } else {
@@ -160,16 +145,21 @@ export default class EncryptedFoldersPlugin extends Plugin {
           .setTitle('Encrypt Folder')
           .setIcon('lock')
           .onClick(() => {
-            new PasswordModal(this.app, 'Encrypt Folder', async (password, lockImmediately) => {
-              const recoveryKey = await this.folderService.createEncryptedFolder(folder, password, lockImmediately);
-              new RecoveryKeyModal(this.app, recoveryKey).open();
+            new PasswordModal(
+              this.app,
+              'Encrypt Folder',
+              async (password, lockImmediately) => {
+                const recoveryKey = await this.folderService.createEncryptedFolder(folder, password, lockImmediately);
+                new RecoveryKeyModal(this.app, recoveryKey).open();
 
-              if (lockImmediately) {
-                new Notice('Folder encrypted and locked.');
-              } else {
-                new Notice('Folder initialized. Ready for encryption.');
-              }
-            }).open();
+                if (lockImmediately) {
+                  new Notice('Folder encrypted and locked.');
+                } else {
+                  new Notice('Folder initialized. Ready for encryption.');
+                }
+              },
+              true,
+            ).open();
           });
       });
     }

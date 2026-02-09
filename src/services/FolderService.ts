@@ -36,6 +36,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
    * @param password The password for the folder.
    */
   async createEncryptedFolder(folder: TFolder, password: string, lockImmediately = false): Promise<string> {
+    if (this.isInsideEncryptedFolder(folder)) {
+      throw new Error('Nested encryption is not allowed. A parent folder is already encrypted.');
+    }
     const recoveryKey = this.generateRecoveryKey();
     const masterKey = await this.encryptionService.generateMasterKey();
     const masterKeyRaw = await this.encryptionService.exportKey(masterKey);
