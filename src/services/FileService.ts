@@ -1,6 +1,8 @@
 import { TFile, Vault, normalizePath } from 'obsidian';
 
 export class FileService {
+  private readonly MAX_RANDOM_SIZE = 65536;
+
   constructor(private vault: Vault) {}
 
   /**
@@ -20,15 +22,25 @@ export class FileService {
    */
   async writeBinary(path: string, data: ArrayBuffer): Promise<TFile> {
     const normalizedPath = normalizePath(path);
-    const existingFile = this.vault.getAbstractFileByPath(normalizedPath);
-
-    if (existingFile instanceof TFile) {
-      await this.vault.modifyBinary(existingFile, data);
-      return existingFile;
-    } else if (existingFile) {
-      throw new Error(`Path ${normalizedPath} exists but is not a file.`);
-    } else {
+    try {
       return await this.vault.createBinary(normalizedPath, data);
+    } catch (e) {
+      if (e.message?.includes('already exists')) {
+        const existingFile = this.vault.getAbstractFileByPath(normalizedPath);
+        if (existingFile instanceof TFile) {
+          await this.vault.modifyBinary(existingFile, data);
+          return existingFile;
+        } else {
+          // It exists on disk but not in cache. Use adapter to overwrite.
+          await this.vault.adapter.writeBinary(normalizedPath, data);
+
+          // Attempt to get the file one more time after a short delay
+          await new Promise((r) => setTimeout(r, 100));
+          const retryFile = this.vault.getAbstractFileByPath(normalizedPath);
+          if (retryFile instanceof TFile) return retryFile;
+        }
+      }
+      throw e;
     }
   }
 
@@ -43,10 +55,8 @@ export class FileService {
     const existingFile = this.vault.getAbstractFileByPath(normalizedPath);
 
     if (existingFile instanceof TFile) {
-      const size = existingFile.stat.size;
-      const randomData = new Uint8Array(size);
-      window.crypto.getRandomValues(randomData as unknown as Uint8Array);
-      await this.vault.modifyBinary(existingFile, randomData.buffer);
+      // We perform a single write. Multiple rapid modifyBinary calls
+      // have been observed to cause file corruption in some Obsidian builds.
       await this.vault.modifyBinary(existingFile, data);
       return existingFile;
     } else {
@@ -71,9 +81,17 @@ export class FileService {
   async shredFile(file: TFile): Promise<void> {
     const size = file.stat.size;
     const randomData = new Uint8Array(size);
-    window.crypto.getRandomValues(randomData as unknown as Uint8Array);
+    this.fillRandomValues(randomData);
     await this.vault.modifyBinary(file, randomData.buffer);
     await this.vault.delete(file); // Permanent delete
+  }
+
+  private fillRandomValues(buffer: Uint8Array): void {
+    const size = buffer.byteLength;
+    for (let i = 0; i < size; i += this.MAX_RANDOM_SIZE) {
+      const chunk = buffer.subarray(i, Math.min(i + this.MAX_RANDOM_SIZE, size));
+      window.crypto.getRandomValues(chunk);
+    }
   }
 
   /**
@@ -81,8 +99,10 @@ export class FileService {
    *
    * @param path The path to check.
    */
-  async exists(path: string): Promise<boolean> {
-    return this.vault.getAbstractFileByPath(normalizePath(path)) instanceof TFile;
+  exists(path: string): boolean {
+    const normalizedPath = normalizePath(path);
+    const file = this.vault.getAbstractFileByPath(normalizedPath);
+    return file instanceof TFile;
   }
 
   /**

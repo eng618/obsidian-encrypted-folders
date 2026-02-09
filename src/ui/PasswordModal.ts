@@ -2,11 +2,12 @@ import { App, Modal, Setting } from 'obsidian';
 
 export class PasswordModal extends Modal {
   private password = '';
+  private lockImmediately = false;
 
   constructor(
     app: App,
     private title: string,
-    private onSubmit: (password: string) => void,
+    private onSubmit: (password: string, lockImmediately?: boolean) => void,
   ) {
     super(app);
   }
@@ -28,6 +29,17 @@ export class PasswordModal extends Modal {
       text.inputEl.type = 'password';
       text.inputEl.focus();
     });
+
+    if (this.title.includes('Encrypt')) {
+      new Setting(contentEl)
+        .setName('Lock immediately')
+        .setDesc('Encrypt and hide files now')
+        .addToggle((toggle) => {
+          toggle.setValue(this.lockImmediately).onChange((value) => {
+            this.lockImmediately = value;
+          });
+        });
+    }
 
     new Setting(contentEl).addButton((btn) =>
       btn
@@ -68,7 +80,7 @@ export class PasswordModal extends Modal {
       return; // Enforce for encryption
     }
     this.close();
-    this.onSubmit(this.password);
+    this.onSubmit(this.password, this.lockImmediately);
   }
 
   onClose() {

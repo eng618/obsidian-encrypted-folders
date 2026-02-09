@@ -6,9 +6,11 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 
 - **Recursive Encryption**: Encrypt entire folder trees (including nested subfolders) with a single click.
 - **Session Decryption**: Temporarily restores plaintext to disk for seamless use with Obsidian Search, Graph view, and Backlinks while unlocked.
+- **Improved Data Integrity**: Encrypted files use a `.locked` extension, preventing Obsidian's indexer or third-party plugins from corrupting binary data by attempting "UTF-8 repairs."
+- **Informational Readme**: Automatically generates a `README_ENCRYPTED.md` in locked folders with clear instructions on how to unlock your data.
 - **Master Key Architecture**: Uses an encrypted Master Key (unwrapped by your password or a recovery key) for flexible access.
 - **Recovery Keys**: Generate a 32-character recovery key during setup to ensure you never lose access to your data.
-- **Secure File Shredding**: Automatically overwrites plaintext sites with secure random data before re-encrypting to prevent forensic disk recovery.
+- **Secure File Shredding**: Automatically overwrites plaintext files with secure random data before re-encrypting to prevent forensic disk recovery.
 - **Auto-Lock Security**: All folders are automatically re-encrypted and locked when the plugin is disabled or Obsidian is closed.
 
 ## 🛡️ Security Specifications
@@ -37,7 +39,8 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 
 1. Right-click an unlocked folder.
 2. Select **Lock Folder**.
-3. The plugin will securely overwrite the content on disk with ciphertext and purge the key from memory.
+3. The plugin will securely overwrite the content on disk with ciphertext, rename files to `[name].locked`, and create a `README_ENCRYPTED.md` with instructions.
+4. The key is purged from memory for maximum security.
 
 ## 🛠️ Development
 

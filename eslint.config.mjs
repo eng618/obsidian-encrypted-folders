@@ -5,9 +5,16 @@ import { recommended } from '@gv-tech/eslint-config';
  * on configuration options, see: https://github.com/Garcia-Ventures/eslint-config
  */
 export default [
-  ...recommended,
-  // Add project-specific overrides here
   {
-    ignores: ['eslint.config.mjs', 'main.js'],
+    ignores: [
+      'main.js',
+      'esbuild.config.mjs',
+      'eslint.config.mjs',
+      '**/test-vault/**',
+      'TestVault/**',
+      'node_modules/**',
+      'dist/**',
+    ],
   },
+  ...recommended,
 ];

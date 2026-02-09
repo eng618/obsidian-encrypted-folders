@@ -27,6 +27,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
     this.encryptionService = new EncryptionService();
     this.fileService = new FileService(this.app.vault);
     this.folderService = new FolderService(this.encryptionService, this.fileService, this.app);
+    await this.folderService.syncFolders();
 
     this.registerEvent(
       this.app.workspace.on('file-menu', (menu, file) => {
@@ -55,11 +56,8 @@ export default class EncryptedFoldersPlugin extends Plugin {
     this.addSettingTab(new EncryptedFoldersSettingTab(this.app, this));
   }
 
-  async handleFolderMenu(menu: Menu, folder: TFolder) {
-    // We need to check async if it is encrypted.
-    // Note: internal Obsidian menus might not await this, so the item might pop in late
-    // or we need to be fast.
-    const isEncrypted = await this.folderService.isEncryptedFolder(folder);
+  handleFolderMenu(menu: Menu, folder: TFolder) {
+    const isEncrypted = this.folderService.isEncryptedFolder(folder);
 
     if (isEncrypted) {
       if (this.folderService.isUnlocked(folder)) {
@@ -79,11 +77,15 @@ export default class EncryptedFoldersPlugin extends Plugin {
             .setIcon('unlock')
             .onClick(() => {
               new PasswordModal(this.app, 'Unlock Folder', async (password) => {
-                const success = await this.folderService.unlockFolder(folder, password);
-                if (success) {
-                  // new Notice('Folder unlocked!');
-                } else {
-                  new Notice('Incorrect password.');
+                try {
+                  const success = await this.folderService.unlockFolder(folder, password);
+                  if (success) {
+                    new Notice('Folder unlocked!');
+                  } else {
+                    new Notice('Incorrect password.');
+                  }
+                } catch (e) {
+                  new Notice(`Unlock failed: ${e.message}`);
                 }
               }).open();
             });
@@ -95,11 +97,15 @@ export default class EncryptedFoldersPlugin extends Plugin {
             .setIcon('key')
             .onClick(() => {
               new PasswordModal(this.app, 'Enter Recovery Key', async (recoveryKey) => {
-                const success = await this.folderService.unlockFolder(folder, recoveryKey, true);
-                if (success) {
-                  new Notice('Folder unlocked with recovery key!');
-                } else {
-                  new Notice('Invalid recovery key.');
+                try {
+                  const success = await this.folderService.unlockFolder(folder, recoveryKey, true);
+                  if (success) {
+                    new Notice('Folder unlocked with recovery key!');
+                  } else {
+                    new Notice('Invalid recovery key.');
+                  }
+                } catch (e) {
+                  new Notice(`Unlock failed: ${e.message}`);
                 }
               }).open();
             });
@@ -111,10 +117,15 @@ export default class EncryptedFoldersPlugin extends Plugin {
           .setTitle('Encrypt Folder')
           .setIcon('lock')
           .onClick(() => {
-            new PasswordModal(this.app, 'Encrypt Folder', async (password) => {
-              const recoveryKey = await this.folderService.createEncryptedFolder(folder, password);
+            new PasswordModal(this.app, 'Encrypt Folder', async (password, lockImmediately) => {
+              const recoveryKey = await this.folderService.createEncryptedFolder(folder, password, lockImmediately);
               new RecoveryKeyModal(this.app, recoveryKey).open();
-              new Notice('Folder encrypted!');
+
+              if (lockImmediately) {
+                new Notice('Folder encrypted and locked.');
+              } else {
+                new Notice('Folder initialized. Ready for encryption.');
+              }
             }).open();
           });
       });

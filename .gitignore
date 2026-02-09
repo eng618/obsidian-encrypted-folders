@@ -32,3 +32,8 @@ data.json
 
 # ESLint cache
 .eslintcache
+
+# Test Vault
+TestVault/.obsidian/*
+TestVault/Edge Cases/obsidian-folder-meta.json
+TestVault/Edge Cases/config.json

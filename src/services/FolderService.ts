@@ -5,7 +5,23 @@ import { FileService } from './FileService';
 
 export class FolderService {
   private unlockedFolders: Map<string, CryptoKey> = new Map();
-  private readonly META_FILE_NAME = '.obsidian-folder-meta';
+  private encryptedFolders: Set<string> = new Set();
+  private readonly META_FILE_NAME = 'obsidian-folder-meta.json';
+  private readonly OLD_META_FILE_NAME = '.obsidian-folder-meta';
+  private readonly LOCKED_EXTENSION = '.locked';
+  private readonly README_FILE_NAME = 'README_ENCRYPTED.md';
+  private readonly README_CONTENT = `
+# 🔒 Folder Encrypted
+
+This folder is currently encrypted and locked by the **Obsidian Encrypted Folders** plugin.
+
+### 🔑 How to Unlock
+1. **Right-click** on this folder in the file explorer.
+2. Select **"Unlock Folder"**.
+3. Enter your password to restore your files.
+
+*Note: The ".locked" files are your encrypted data. Do not delete or modify them while the folder is locked.*
+`.trim();
 
   constructor(
     private encryptionService: EncryptionService,
@@ -19,7 +35,7 @@ export class FolderService {
    * @param folder The folder to encrypt.
    * @param password The password for the folder.
    */
-  async createEncryptedFolder(folder: TFolder, password: string): Promise<string> {
+  async createEncryptedFolder(folder: TFolder, password: string, lockImmediately = false): Promise<string> {
     const recoveryKey = this.generateRecoveryKey();
     const masterKey = await this.encryptionService.generateMasterKey();
     const masterKeyRaw = await this.encryptionService.exportKey(masterKey);
@@ -61,12 +77,15 @@ export class FolderService {
     const encoder2 = new TextEncoder();
     await this.fileService.writeBinary(metaPath, encoder2.encode(jsonString).buffer);
 
-    // Initial encryption of contents
-    await this.encryptFolderContents(folder, masterKey);
+    // Only encrypt contents if the user wants to lock immediately
+    if (lockImmediately) {
+      await this.encryptFolderContents(folder, masterKey);
+    } else {
+      // Otherwise, keep it "Unlocked" in memory for continued editing
+      this.unlockedFolders.set(folder.path, masterKey);
+    }
 
-    // Mark as unlocked in session
-    this.unlockedFolders.set(folder.path, masterKey);
-
+    this.encryptedFolders.add(folder.path);
     return recoveryKey;
   }
 
@@ -83,9 +102,16 @@ export class FolderService {
   }
 
   async encryptFolderContents(folder: TFolder, key: CryptoKey): Promise<void> {
-    for (const child of folder.children) {
+    // Collect children first to avoid iteration issues when files are deleted/created
+    const children = [...folder.children];
+    for (const child of children) {
       if (child instanceof TFile) {
-        if (child.name === this.META_FILE_NAME) continue;
+        if (
+          child.name === this.META_FILE_NAME ||
+          child.name === this.OLD_META_FILE_NAME ||
+          child.name === this.README_FILE_NAME
+        )
+          continue;
         await this.encryptFile(child, key);
       } else if (child instanceof TFolder) {
         await this.encryptFolderContents(child, key);
@@ -94,9 +120,15 @@ export class FolderService {
   }
 
   async decryptFolderContents(folder: TFolder, key: CryptoKey): Promise<void> {
-    for (const child of folder.children) {
+    const children = [...folder.children];
+    for (const child of children) {
       if (child instanceof TFile) {
-        if (child.name === this.META_FILE_NAME) continue;
+        if (
+          child.name === this.META_FILE_NAME ||
+          child.name === this.OLD_META_FILE_NAME ||
+          child.name === this.README_FILE_NAME
+        )
+          continue;
         await this.decryptFile(child, key);
       } else if (child instanceof TFolder) {
         await this.decryptFolderContents(child, key);
@@ -111,8 +143,13 @@ export class FolderService {
     const result = await this.encryptionService.encryptWithKey(data, key);
     const combined = this.combineBuffersWithMagic(result.iv, result.ciphertext);
 
-    // Securely replace plaintext with ciphertext
-    await this.fileService.secureWrite(file.path, combined);
+    const newPath = file.path + this.LOCKED_EXTENSION;
+
+    // 1. Write the encrypted version
+    await this.fileService.writeBinary(newPath, combined);
+
+    // 2. Shred and delete the original plaintext version
+    await this.fileService.shredFile(file);
   }
 
   async decryptFile(file: TFile, key: CryptoKey): Promise<void> {
@@ -121,10 +158,31 @@ export class FolderService {
 
     const { iv, ciphertext } = this.splitMagicBuffer(data);
     try {
-      const plaintext = await this.encryptionService.decryptWithKey(ciphertext, key, iv);
-      await this.fileService.writeBinary(file.path, plaintext);
+      // Ensure we pass the exact buffer views to SubtleCrypto
+      const plaintext = await this.encryptionService.decryptWithKey(
+        ciphertext as BufferSource,
+        key,
+        iv as BufferSource,
+      );
+
+      let newPath = file.path;
+      if (newPath.endsWith(this.LOCKED_EXTENSION)) {
+        newPath = newPath.slice(0, -this.LOCKED_EXTENSION.length);
+      } else {
+        newPath = newPath + '.decrypted'; // Fallback
+      }
+
+      await this.fileService.writeBinary(newPath, plaintext);
+      await this.app.vault.delete(file);
     } catch (e) {
-      console.error(`Failed to decrypt file: ${file.path}`, e);
+      const errorMsg =
+        `Failed to decrypt file: ${file.path}\n` +
+        `  Error: ${e.name} - ${e.message}\n` +
+        `  File Size: ${data.byteLength}\n` +
+        `  IV Length: ${iv.byteLength}\n` +
+        `  Ciphertext Length: ${ciphertext.byteLength}`;
+      console.error(errorMsg);
+      throw new Error(errorMsg);
     }
   }
 
@@ -150,9 +208,15 @@ export class FolderService {
     return tmp.buffer;
   }
 
-  private splitMagicBuffer(data: ArrayBuffer): { iv: Uint8Array; ciphertext: ArrayBuffer } {
-    const iv = new Uint8Array(data, this.MAGIC_BYTES.length, 12);
-    const ciphertext = data.slice(this.MAGIC_BYTES.length + 12);
+  private splitMagicBuffer(data: ArrayBuffer): { iv: Uint8Array; ciphertext: Uint8Array } {
+    const headerOffset = this.MAGIC_BYTES.length;
+    const ivOffset = headerOffset + 12;
+
+    // Use subarray for efficient view slicing
+    const fullView = new Uint8Array(data);
+    const iv = fullView.slice(headerOffset, ivOffset);
+    const ciphertext = fullView.slice(ivOffset);
+
     return { iv, ciphertext };
   }
 
@@ -173,9 +237,55 @@ export class FolderService {
     return tmp.buffer;
   }
 
-  async isEncryptedFolder(folder: TFolder): Promise<boolean> {
+  /** Scans the vault for encrypted folders to populate the synchronous cache. */
+  async syncFolders(): Promise<void> {
+    // Wait a brief moment for the vault to be ready
+    await new Promise((r) => setTimeout(r, 500));
+
+    const files = this.app.vault.getFiles();
+    for (const file of files) {
+      if (file.name === this.META_FILE_NAME || file.name === this.OLD_META_FILE_NAME) {
+        if (file.parent) {
+          this.encryptedFolders.add(file.parent.path);
+        }
+      }
+    }
+
+    // Also check the adapter for files that might not be indexed yet
+    try {
+      // We check recursively for common locations if needed,
+      // but for now let's use the adapter to check the root children at least
+      const rootRes = await this.app.vault.adapter.list('');
+      for (const folderPath of rootRes.folders) {
+        if (
+          (await this.app.vault.adapter.exists(`${folderPath}/${this.META_FILE_NAME}`)) ||
+          (await this.app.vault.adapter.exists(`${folderPath}/${this.OLD_META_FILE_NAME}`))
+        ) {
+          this.encryptedFolders.add(folderPath);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to deep sync folders with adapter:', e);
+    }
+  }
+
+  isEncryptedFolder(folder: TFolder): boolean {
+    // 1. Check synchronous cache
+    if (this.encryptedFolders.has(folder.path)) return true;
+
+    // 2. Check vault index (if synced)
     const metaPath = `${folder.path}/${this.META_FILE_NAME}`;
-    return await this.fileService.exists(metaPath);
+    const oldMetaPath = `${folder.path}/${this.OLD_META_FILE_NAME}`;
+
+    const exists = this.fileService.exists(metaPath);
+    const oldExists = this.fileService.exists(oldMetaPath);
+
+    if (exists || oldExists) {
+      this.encryptedFolders.add(folder.path);
+      return true;
+    }
+
+    return false;
   }
 
   getEncryptedParent(file: TFile | TFolder): TFolder | null {
@@ -215,7 +325,9 @@ export class FolderService {
       );
       const mkIV = new Uint8Array(this.base64ToArrayBuffer(isRecovery ? metadata.recoveryIV! : metadata.masterKeyIV));
 
-      const masterKeyRaw = await this.encryptionService.decryptWithKey(wrappedMK.buffer, derivedKey, mkIV);
+      const masterKeyRaw = await this.encryptionService.decryptWithKey(wrappedMK, derivedKey, mkIV).catch(() => {
+        throw new Error('Authentication failed: Invalid key');
+      });
       const masterKey = await this.encryptionService.importKey(masterKeyRaw);
 
       // 3. Verify master key with testToken
@@ -223,16 +335,30 @@ export class FolderService {
       const iv = tokenData.slice(0, 12);
       const ciphertext = tokenData.slice(12);
 
-      const resultBuffer = await this.encryptionService.decryptWithKey(ciphertext.buffer, masterKey, iv);
+      const resultBuffer = await this.encryptionService.decryptWithKey(ciphertext, masterKey, iv).catch(() => {
+        throw new Error('Authentication failed: Verification failed');
+      });
       const resultStr = new TextDecoder().decode(resultBuffer);
 
       if (resultStr === 'OBSIDIAN_ENCRYPTED_VERIFICATION') {
-        this.unlockedFolders.set(folder.path, masterKey);
+        // CONTENT DECRYPTION MUST HAPPEN BEFORE MARKING AS UNLOCKED
+        // To ensure a transactional state.
         await this.decryptFolderContents(folder, masterKey);
+
+        // Delete readme if it exists
+        const readmePath = `${folder.path}/${this.README_FILE_NAME}`;
+        const readmeFile = this.fileService.getFile(readmePath);
+        if (readmeFile) {
+          await this.app.vault.delete(readmeFile);
+        }
+
+        this.unlockedFolders.set(folder.path, masterKey);
         return true;
+      } else {
+        throw new Error('Authentication failed: Token mismatch');
       }
     } catch (e) {
-      console.warn('Unlock failed for folder:', folder.path, e);
+      console.warn('Unlock error for folder:', folder.path, e);
     }
 
     return false;
@@ -242,6 +368,11 @@ export class FolderService {
     const key = this.unlockedFolders.get(folder.path);
     if (key) {
       await this.encryptFolderContents(folder, key);
+
+      // Create informational readme
+      const readmePath = `${folder.path}/${this.README_FILE_NAME}`;
+      await this.fileService.writeBinary(readmePath, new TextEncoder().encode(this.README_CONTENT).buffer);
+
       this.unlockedFolders.delete(folder.path);
     }
   }

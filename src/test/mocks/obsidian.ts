@@ -1,9 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 export class TFile {
   path: string;
   name: string;
   parent: TFolder;
   stat: { size: number; mtime: number; ctime: number };
+  data?: ArrayBuffer;
 }
 
 export class TFolder {
@@ -16,19 +16,25 @@ export class Vault {
   files: Map<string, TFile | TFolder> = new Map();
 
   readBinary = jest.fn(async (file: TFile) => {
-    return (file as any).data || new ArrayBuffer(0);
+    return file.data || new ArrayBuffer(0);
   });
 
   modifyBinary = jest.fn(async (file: TFile, data: ArrayBuffer) => {
-    (file as any).data = data;
+    file.data = data;
     file.stat.size = data.byteLength;
   });
 
   createBinary = jest.fn(async (path: string, data: ArrayBuffer) => {
+    const existing = this.files.get(path);
+    if (existing instanceof TFile) {
+      existing.data = data;
+      existing.stat.size = data.byteLength;
+      return existing;
+    }
     const file = new TFile();
     file.path = path;
     file.name = path.split('/').pop() || '';
-    (file as any).data = data;
+    file.data = data;
     file.stat = { size: data.byteLength, mtime: Date.now(), ctime: Date.now() };
     this.files.set(path, file);
     return file;

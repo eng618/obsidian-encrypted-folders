@@ -37,7 +37,7 @@ describe('EncryptionService', () => {
     const data = new TextEncoder().encode('Secret message').buffer;
     const result = await service.encryptWithKey(data, key);
 
-    const decrypted = await service.decryptWithKey(result.ciphertext, key, result.iv);
+    const decrypted = await service.decryptWithKey(result.ciphertext, key, result.iv as BufferSource);
     const decryptedText = new TextDecoder().decode(decrypted);
     expect(decryptedText).toBe('Secret message');
   });
@@ -59,7 +59,7 @@ describe('EncryptionService', () => {
 
     const data = new TextEncoder().encode('Master secret').buffer;
     const subResult = await service.encryptWithKey(data, masterKey);
-    const decrypted = await service.decryptWithKey(subResult.ciphertext, imported, subResult.iv);
+    const decrypted = await service.decryptWithKey(subResult.ciphertext, imported, subResult.iv as BufferSource);
 
     expect(new TextDecoder().decode(decrypted)).toBe('Master secret');
   });

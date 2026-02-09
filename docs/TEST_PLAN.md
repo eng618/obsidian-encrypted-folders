@@ -9,37 +9,44 @@ To test the plugin, you must link your development build to an Obsidian vault.
 ### Prerequisites
 
 - [Obsidian](https://obsidian.md/) installed.
-- A dedicated "Test Vault" created in Obsidian.
+- **TestVault**: A pre-configured test vault is included in this repository.
 
-### Steps
+### Initial Setup (Project-specific)
 
-1. **Identify Plugin Path**:
-   Locate your test vault on your file system. The plugin directory is:
-   `<VaultPath>/.obsidian/plugins/obsidian-encrypted-folders`
-   _(Create the folder if it doesn't exist)_.
-
-2. **Build the Plugin**:
-   In your development directory, run:
-
+1. **Build the Plugin**:
    ```bash
    npm run build
    ```
-
-3. **Symlink or Copy Files**:
-   Link the build output to your vault. From your dev directory:
+2. **Setup Symlinks**:
+   Run the following to link the plugin into the project's own `TestVault`:
 
    ```bash
-   ln -s $(pwd)/main.js <VaultPath>/.obsidian/plugins/obsidian-encrypted-folders/main.js
-   ln -s $(pwd)/manifest.json <VaultPath>/.obsidian/plugins/obsidian-encrypted-folders/manifest.json
-   ln -s $(pwd)/styles.css <VaultPath>/.obsidian/plugins/obsidian-encrypted-folders/styles.css
+   mkdir -p TestVault/.obsidian/plugins/obsidian-encrypted-folders
+   ln -sf $(pwd)/main.js TestVault/.obsidian/plugins/obsidian-encrypted-folders/main.js
+   ln -sf $(pwd)/manifest.json TestVault/.obsidian/plugins/obsidian-encrypted-folders/manifest.json
+   ln -sf $(pwd)/styles.css TestVault/.obsidian/plugins/obsidian-encrypted-folders/styles.css
    ```
 
-   _Note: On Windows, use `mklink` or manually copy the files._
+3. **Enable Plugin**:
+   - Open Obsidian and select **"Open folder as vault"**.
+   - Choose the `TestVault` directory in this project root.
+   - Go to **Settings** > **Community Plugins** > find **Encrypted Folders** and toggle **ON**.
 
-4. **Enable Plugin**:
-   - Open Obsidian -> Settings -> Community Plugins.
-   - Turn off "Restricted Mode" if necessary.
-   - Find **Encrypted Folders** and toggle it **ON**.
+### 🔄 Resetting the Test Vault
+
+If you want to clear all encryptions and return `TestVault` to its clean state (plaintext):
+
+1. **Revert Git Changes**:
+   ```bash
+   git checkout TestVault/
+   ```
+2. **Remove Metadata**:
+   Encrypted folders use `obsidian-folder-meta.json`. To delete them and clean up `.locked` files:
+   ```bash
+   find TestVault -name "obsidian-folder-meta.json" -delete
+   find TestVault -name "*.locked" -delete
+   find TestVault -name "README_ENCRYPTED.md" -delete
+   ```
 
 ---
 
@@ -59,11 +66,11 @@ Ensure the plugin core surface area is functional.
 
 ### Encryption & Locking
 
-| ID  | Test Case          | Steps                                                | Expected Result                                                                               |
-| --- | ------------------ | ---------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| F.1 | Initial Encryption | Right-click folder -> Encrypt. Enter password.       | Files are encrypted. `.obsidian-folder-meta` is created. Recovery key is displayed.           |
-| F.2 | Lock Folder        | Right-click unlocked folder -> Lock.                 | Files convert to binary/ciphertext on disk. Folder remains in vault but files are unreadable. |
-| F.3 | Unlock Folder      | Right-click locked folder -> Unlock. Enter password. | Files are restored to plaintext. Obsidian can index/search them again.                        |
+| ID  | Test Case          | Steps                                                | Expected Result                                                                                                             |
+| --- | ------------------ | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| F.1 | Initial Encryption | Right-click folder -> Encrypt. Enter password.       | Files are encrypted. `obsidian-folder-meta.json` is created. Recovery key is displayed.                                     |
+| F.2 | Lock Folder        | Right-click unlocked folder -> Lock.                 | Files are encrypted and renamed to `.locked`. `README_ENCRYPTED.md` is created. Original filenames are hidden.              |
+| F.3 | Unlock Folder      | Right-click locked folder -> Unlock. Enter password. | Files are restored to original names and plaintext. `README_ENCRYPTED.md` is deleted. Obsidian can index/search them again. |
 
 ### Recovery Mechanisms
 
@@ -87,7 +94,7 @@ Ensure the plugin core surface area is functional.
 
 1. Unlock several folders.
 2. Disable the plugin or Close Obsidian.
-3. **Verification**: Check the vault on disk using an external app (Notepad/VS Code). Verify that all folders have been re-locked and files start with `ENC!`.
+3. **Verification**: Check the vault on disk using an external app (Notepad/VS Code). Verify that all folders have been re-locked, files have `.locked` extensions, and start with `ENC!`.
 
 ---
 
@@ -105,3 +112,9 @@ Ensure the plugin core surface area is functional.
 - **Deep Nesting**: Test a folder structure 5+ levels deep. Ensure all sub-files are encrypted.
 - **Special Characters**: Use folders/files with emojis or non-LATIN characters in names.
 - **ReadOnly Files**: Attempt to encrypt a folder containing files without write permissions. Verify graceful error handling.
+
+---
+
+## 📋 Personal Notes
+
+- [ ] Recovery key - Xmogfvvr-mgApTfG8-KQFqAiyQ-RDv5KHar

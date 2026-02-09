@@ -14,8 +14,8 @@ export interface IEncryptionService {
   generateSalt(length?: number): Uint8Array;
   generateIV(length?: number): Uint8Array;
   deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>;
-  encryptWithKey(data: ArrayBuffer, key: CryptoKey): Promise<EncryptionResult>;
-  decryptWithKey(ciphertext: ArrayBuffer, key: CryptoKey, iv: Uint8Array): Promise<ArrayBuffer>;
+  encryptWithKey(data: BufferSource, key: CryptoKey): Promise<EncryptionResult>;
+  decryptWithKey(ciphertext: BufferSource, key: CryptoKey, iv: BufferSource): Promise<ArrayBuffer>;
   generateMasterKey(): Promise<CryptoKey>;
   exportKey(key: CryptoKey): Promise<ArrayBuffer>;
   importKey(data: ArrayBuffer): Promise<CryptoKey>;
@@ -44,8 +44,8 @@ export class EncryptionService implements IEncryptionService {
     return window.crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        salt: salt as any,
+
+        salt: salt as BufferSource,
         iterations: this.ITERATIONS,
         hash: this.DIGEST,
       },
@@ -56,17 +56,16 @@ export class EncryptionService implements IEncryptionService {
     );
   }
 
-  async encryptWithKey(data: ArrayBuffer, key: CryptoKey): Promise<EncryptionResult> {
+  async encryptWithKey(data: BufferSource, key: CryptoKey): Promise<EncryptionResult> {
     const iv = this.generateIV();
     const ciphertext = await window.crypto.subtle.encrypt(
       {
         name: 'AES-GCM',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        iv: iv as any,
+        iv: iv as BufferSource,
+        tagLength: 128,
       },
       key,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      data as any,
+      data as BufferSource,
     );
     return {
       ciphertext,
@@ -75,16 +74,15 @@ export class EncryptionService implements IEncryptionService {
     };
   }
 
-  async decryptWithKey(ciphertext: ArrayBuffer, key: CryptoKey, iv: Uint8Array): Promise<ArrayBuffer> {
+  async decryptWithKey(ciphertext: BufferSource, key: CryptoKey, iv: BufferSource): Promise<ArrayBuffer> {
     return window.crypto.subtle.decrypt(
       {
         name: 'AES-GCM',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        iv: iv as any,
+        iv: iv as BufferSource,
+        tagLength: 128,
       },
       key,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ciphertext as any,
+      ciphertext as BufferSource,
     );
   }
 
@@ -98,7 +96,7 @@ export class EncryptionService implements IEncryptionService {
 
   async decrypt(ciphertext: ArrayBuffer, password: string, iv: Uint8Array, salt: Uint8Array): Promise<ArrayBuffer> {
     const derivedKey = await this.deriveKey(password, salt);
-    return this.decryptWithKey(ciphertext, derivedKey, iv);
+    return this.decryptWithKey(ciphertext, derivedKey, iv as BufferSource);
   }
 
   async generateMasterKey(): Promise<CryptoKey> {
@@ -114,7 +112,9 @@ export class EncryptionService implements IEncryptionService {
   }
 
   async importKey(data: ArrayBuffer): Promise<CryptoKey> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return window.crypto.subtle.importKey('raw', data as any, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
+    return window.crypto.subtle.importKey('raw', data as BufferSource, { name: 'AES-GCM' }, true, [
+      'encrypt',
+      'decrypt',
+    ]);
   }
 }

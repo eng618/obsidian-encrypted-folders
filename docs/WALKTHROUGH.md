@@ -17,8 +17,9 @@ The plugin uses a **Master Key wrapping** strategy to ensure high security and f
 
 When you encrypt a folder, the plugin recursively visits every subfolder and file.
 
-- It skips the `.obsidian-folder-meta` file which contains the encrypted keys.
+- It skips the `obsidian-folder-meta.json` file which contains the encrypted keys.
 - It uses a "Magic" header (`ENC!`) to distinguish encrypted files from plaintext.
+- It renames encrypted files to `[filename].locked` to protect them from external indexing or corruption.
 
 ### 2. Recovery Keys
 
@@ -42,6 +43,10 @@ The plugin automatically locks all open folders when:
 - You close the Obsidian application.
 - This ensures no plaintext is left on disk when you are not actively using your vault.
 
+### 5. User Guidance (New)
+
+When a folder is locked, the plugin generates a `README_ENCRYPTED.md` file. This tells the user (and any other apps) that the folder is purposely locked and provides instructions on how to restore the files using the password.
+
 ## 🧪 Testing and Verification
 
 You can verify the security and integrity of the plugin using the included test suite.
@@ -60,8 +65,8 @@ This runs tests for:
 
 ### Manual Verification
 
-1.  **Check for Plaintext**: Open your vault folder in a standard file explorer (like Finder or Windows Explorer) while the folder is **locked**. Try to open a `.md` file in Notepad; it should look like binary gibberish and start with `ENC!`.
-2.  **Check Meta-Data**: Inspect the `.obsidian-folder-meta` file. It should contain base64 strings but **no secrets** in plaintext.
+1.  **Check for Plaintext**: Open your vault folder in a standard file explorer while the folder is **locked**. Encrypted files will have a `.locked` extension. Try to open one; it should look like binary gibberish and start with `ENC!`.
+2.  **Check Meta-Data**: Inspect the `obsidian-folder-meta.json` file. It should contain base64 strings but **no secrets** in plaintext.
 3.  **Audit the Build**: Run `npm run lint` and `npm run build` to ensure the code is clean and follows standards.
 
 ## ⚠️ Important Considerations

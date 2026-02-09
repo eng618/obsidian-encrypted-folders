@@ -22,7 +22,7 @@
     "prepare": "husky",
     "test": "jest",
     "test:watch": "jest --watch",
-    "version": "node version-bump.mjs && git add manifest.json versions.json"
+    "version": "node scripts/version-bump.mjs && git add manifest.json versions.json"
   },
   "lint-staged": {
     "*.(js|ts|mjs|cjs)?(x)": [
