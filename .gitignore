@@ -37,3 +37,6 @@ data.json
 TestVault/.obsidian/*
 TestVault/Edge Cases/obsidian-folder-meta.json
 TestVault/Edge Cases/config.json
+
+# Coverage
+coverage/

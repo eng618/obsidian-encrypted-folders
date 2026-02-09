@@ -21,6 +21,7 @@
     "lint:report": "eslint . --cache -o ./eslintReport.html -f html",
     "prepare": "husky",
     "test": "jest",
+    "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
     "version": "node scripts/version-bump.mjs && git add manifest.json versions.json"
   },
