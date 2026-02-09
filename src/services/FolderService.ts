@@ -83,6 +83,10 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     // Only encrypt contents if the user wants to lock immediately
     if (lockImmediately) {
       await this.encryptFolderContents(folder, masterKey);
+
+      // Create informational readme to show the folder is locked
+      const readmePath = `${folder.path}/${this.README_FILE_NAME}`;
+      await this.fileService.writeBinary(readmePath, new TextEncoder().encode(this.README_CONTENT).buffer);
     } else {
       // Otherwise, keep it "Unlocked" in memory for continued editing
       this.unlockedFolders.set(folder.path, masterKey);
