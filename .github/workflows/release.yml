@@ -19,7 +19,7 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
       # The following steps run when a release is created by release-please
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: ${{ steps.release.outputs.release_created }}
 
       - name: Enable Corepack
