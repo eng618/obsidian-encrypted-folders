@@ -1,4 +1,5 @@
 import { App, Modal, Setting } from 'obsidian';
+import { addPasswordToggle } from './UIUtils';
 
 export class PasswordModal extends Modal {
   private password = '';
@@ -22,13 +23,15 @@ export class PasswordModal extends Modal {
     strengthEl.style.marginBottom = '10px';
     strengthEl.style.fontSize = '0.8em';
 
-    new Setting(contentEl).setName('Password').addText((text) => {
+    const passwordSetting = new Setting(contentEl).setName('Password');
+    passwordSetting.addText((text) => {
       text.setPlaceholder('Enter password').onChange((value) => {
         this.password = value;
         this.updateStrength(strengthEl);
       });
       text.inputEl.type = 'password';
       text.inputEl.focus();
+      addPasswordToggle(passwordSetting, text);
     });
 
     if (this.showLockToggle) {

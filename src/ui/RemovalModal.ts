@@ -1,4 +1,5 @@
 import { App, Modal, Notice, Setting } from 'obsidian';
+import { addPasswordToggle } from './UIUtils';
 
 export class RemovalModal extends Modal {
   private password = '';
@@ -26,12 +27,14 @@ export class RemovalModal extends Modal {
         text: 'The folder is currently locked. Enter your password to decrypt files and remove encryption.',
       });
 
-      new Setting(contentEl).setName('Password').addText((text) => {
+      const passwordSetting = new Setting(contentEl).setName('Password');
+      passwordSetting.addText((text) => {
         text.setPlaceholder('Enter password').onChange((value) => {
           this.password = value;
         });
         text.inputEl.type = 'password';
         text.inputEl.focus();
+        addPasswordToggle(passwordSetting, text);
       });
     }
 
