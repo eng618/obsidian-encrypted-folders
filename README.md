@@ -8,6 +8,8 @@
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders?ref=badge_shield)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
+[![Buy Me A Coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=%E2%98%95&slug=eng618&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff)](https://www.buymeacoffee.com/eng618)
+
 A secure, recursive folder encryption plugin for Obsidian. Protect entire directories within your vault with industrial-grade encryption while maintaining full compatibility with Obsidian features like Search and Graph while unlocked.
 
 ## ✨ Features
@@ -95,6 +97,12 @@ Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for g
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Feng618%2Fobsidian-encrypted-folders?ref=badge_large)
 
 MIT License. See `LICENSE` for details.
+
+## Support
+
+If you find this plugin useful and want to support its development, you can buy me a coffee!
+
+[![Buy Me A Coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=%22☕%22&slug=eng618&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff)](https://www.buymeacoffee.com/eng618)
 
 ## 🤝 Author
 
