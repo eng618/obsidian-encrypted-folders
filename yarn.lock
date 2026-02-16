@@ -140,9 +140,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@eng618/prettier-config@npm:^2.6.0":
-  version: 2.6.0
-  resolution: "@eng618/prettier-config@npm:2.6.0"
+"@eng618/prettier-config@npm:^2.7.0":
+  version: 2.7.0
+  resolution: "@eng618/prettier-config@npm:2.7.0"
   dependencies:
     prettier-plugin-jsdoc: "npm:^1.8.0"
     prettier-plugin-organize-imports: "npm:^4.3.0"
@@ -153,7 +153,7 @@ __metadata:
   peerDependenciesMeta:
     typescript:
       optional: true
-  checksum: 10c0/40b864c51b0a0e2e2c201982e608656d941eea864b956bc358834fadb6d1eb398290ce0512a5db6ecdb2e8b0ce7a6fb9cefd9634714c94f53ff61ffd340d6b77
+  checksum: 10c0/48c2e18811f24b9f2f8c16eaaf8374357b23b69615bd6041e044a5d07698511175943c61ff898ecc5a737b9c1530f6e1f63b359132a74e63d712cf091e388209
   languageName: node
   linkType: hard
 
@@ -2789,7 +2789,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "obsidian-encrypted-folders@workspace:."
   dependencies:
-    "@eng618/prettier-config": "npm:^2.6.0"
+    "@eng618/prettier-config": "npm:^2.7.0"
     "@gv-tech/eslint-config": "npm:^0.1.8"
     "@types/node": "npm:^22.18.11"
     "@typescript-eslint/eslint-plugin": "npm:^8.46.2"
