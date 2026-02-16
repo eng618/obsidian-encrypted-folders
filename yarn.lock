@@ -2800,7 +2800,7 @@ __metadata:
     husky: "npm:^9.1.7"
     jsdom: "npm:^28.0.0"
     lint-staged: "npm:^16.2.7"
-    obsidian: "npm:^1.10.0"
+    obsidian: "npm:^1.12.0"
     prettier: "npm:^3.8.1"
     tslib: "npm:2.8.1"
     typescript: "npm:^5.9.3"
@@ -2810,16 +2810,16 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"obsidian@npm:^1.10.0":
-  version: 1.11.4
-  resolution: "obsidian@npm:1.11.4"
+"obsidian@npm:^1.12.0":
+  version: 1.12.0
+  resolution: "obsidian@npm:1.12.0"
   dependencies:
     "@types/codemirror": "npm:5.60.8"
     moment: "npm:2.29.4"
   peerDependencies:
     "@codemirror/state": 6.5.0
     "@codemirror/view": 6.38.6
-  checksum: 10c0/0dcb0436f3823c9bbe42f6c2dd18a9890846490967829fbd25403d6d0e6da7b498698991fd4d50cb212efa56bc80c9ae83c3b5b2347a44938bb7834b783eecdf
+  checksum: 10c0/783c537e250b4fd039210d9233be24cb1cb85b89b8ff044ab8c4510028f13c3538d28e85fd64b4188aa271de956a677528fd3e0c96062a8478f9bedcaf54d2ea
   languageName: node
   linkType: hard
 
