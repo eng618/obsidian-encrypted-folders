@@ -43,7 +43,7 @@
     "@gv-tech/eslint-config": "^0.1.8",
     "@types/node": "^22.18.11",
     "@typescript-eslint/eslint-plugin": "^8.46.2",
-    "@typescript-eslint/parser": "^8.46.2",
+    "@typescript-eslint/parser": "^8.55.0",
     "@vitest/coverage-v8": "^4.0.18",
     "builtin-modules": "5.0.0",
     "eslint": "^10.0.0",
