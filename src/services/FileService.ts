@@ -37,7 +37,9 @@ export class FileService {
           // Attempt to get the file one more time after a short delay
           await new Promise((r) => setTimeout(r, 100));
           const retryFile = this.vault.getAbstractFileByPath(normalizedPath);
-          if (retryFile instanceof TFile) return retryFile;
+          if (retryFile instanceof TFile) {
+            return retryFile;
+          }
         }
       }
       throw e;

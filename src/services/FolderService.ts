@@ -103,7 +103,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     window.crypto.getRandomValues(bytes);
     for (let i = 0; i < 32; i++) {
       ret += charset.charAt(bytes[i] % charset.length);
-      if ((i + 1) % 8 === 0 && i < 31) ret += '-';
+      if ((i + 1) % 8 === 0 && i < 31) {
+        ret += '-';
+      }
     }
     return ret;
   }
@@ -117,8 +119,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
           child.name === this.META_FILE_NAME ||
           child.name === this.OLD_META_FILE_NAME ||
           child.name === this.README_FILE_NAME
-        )
+        ) {
           continue;
+        }
         await this.encryptFile(child, key);
       } else if (child instanceof TFolder) {
         await this.encryptFolderContents(child, key);
@@ -134,8 +137,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
           child.name === this.META_FILE_NAME ||
           child.name === this.OLD_META_FILE_NAME ||
           child.name === this.README_FILE_NAME
-        )
+        ) {
           continue;
+        }
         await this.decryptFile(child, key);
       } else if (child instanceof TFolder) {
         await this.decryptFolderContents(child, key);
@@ -145,7 +149,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
   async encryptFile(file: TFile, key: CryptoKey): Promise<void> {
     const data = await this.fileService.readBinary(file);
-    if (this.hasMagic(data)) return;
+    if (this.hasMagic(data)) {
+      return;
+    }
 
     const result = await this.encryptionService.encryptWithKey(data, key);
     const combined = this.combineBuffersWithMagic(result.iv, result.ciphertext);
@@ -161,7 +167,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
   async decryptFile(file: TFile, key: CryptoKey): Promise<void> {
     const data = await this.fileService.readBinary(file);
-    if (!this.hasMagic(data)) return;
+    if (!this.hasMagic(data)) {
+      return;
+    }
 
     const { iv, ciphertext } = this.splitMagicBuffer(data);
     try {
@@ -197,7 +205,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   private readonly MAGIC_BYTES = new TextEncoder().encode(this.MAGIC);
 
   private hasMagic(data: ArrayBuffer): boolean {
-    if (data.byteLength < 4) return false;
+    if (data.byteLength < 4) {
+      return false;
+    }
     const view = new Uint8Array(data, 0, 4);
     return (
       view[0] === this.MAGIC_BYTES[0] &&
@@ -278,7 +288,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
   isEncryptedFolder(folder: TFolder): boolean {
     // 1. Check synchronous cache
-    if (this.encryptedFolders.has(folder.path)) return true;
+    if (this.encryptedFolders.has(folder.path)) {
+      return true;
+    }
 
     // 2. Check vault index (if synced)
     const metaPath = `${folder.path}/${this.META_FILE_NAME}`;
@@ -315,7 +327,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   async unlockFolder(folder: TFolder, secret: string, isRecovery = false): Promise<boolean> {
     const metaPath = `${folder.path}/${this.META_FILE_NAME}`;
     const metaFile = this.fileService.getFile(metaPath);
-    if (!metaFile) return false;
+    if (!metaFile) {
+      return false;
+    }
 
     const contentBuffer = await this.fileService.readBinary(metaFile);
     const contentStr = new TextDecoder().decode(contentBuffer);
@@ -421,7 +435,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
         throw new Error('Password is required to decrypt and remove encryption.');
       }
       const unlocked = await this.unlockFolder(folder, password, isRecovery);
-      if (!unlocked) return false;
+      if (!unlocked) {
+        return false;
+      }
     }
 
     // 2. Folder is now unlocked (plaintext files on disk). Clean up metadata.
