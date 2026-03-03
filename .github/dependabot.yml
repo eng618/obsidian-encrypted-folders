@@ -4,33 +4,33 @@
 # https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
 version: 2
 updates:
-  # Enable version updates for github actions
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "monthly"
+    # Enable version updates for github actions
+    - package-ecosystem: "github-actions"
+      directory: "/"
+      schedule:
+          interval: "monthly"
 
-  # Enable version updates for go
-  # - package-ecosystem: gomod
-  #   directory: "/"
-  #   schedule:
-  #     interval: "monthly"
+    # Enable version updates for go
+    # - package-ecosystem: gomod
+    #   directory: "/"
+    #   schedule:
+    #     interval: "monthly"
 
-  # Enable version updates for npm/yarn
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
+    # Enable version updates for npm/yarn
+    - package-ecosystem: "bun"
+      directory: "/"
+      schedule:
+          interval: "weekly"
+      open-pull-requests-limit: 10
 
-  # Enable version updates for Docker
-  # - package-ecosystem: "docker"
-  #   directory: "/"
-  #   schedule:
-  #     interval: "monthly"
+    # Enable version updates for Docker
+    # - package-ecosystem: "docker"
+    #   directory: "/"
+    #   schedule:
+    #     interval: "monthly"
 
-  # Enable version updates for Dart
-  # - package-ecosystem: "pub"
-  #   directory: "/"
-  #   schedule:
-  #     interval: "monthly"
+    # Enable version updates for Dart
+    # - package-ecosystem: "pub"
+    #   directory: "/"
+    #   schedule:
+    #     interval: "monthly"
