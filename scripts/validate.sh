@@ -15,31 +15,31 @@ echo "🚀 Starting validation..."
 # 1. Formatting
 if [ "$FIX_MODE" = true ]; then
   echo "🎨 Formatting files..."
-  yarn format
+  bun run format
 else
   echo "🎨 Checking formatting..."
-  yarn format:ci
+  bun run format:ci
 fi
 
 # 2. Linting
 if [ "$FIX_MODE" = true ]; then
   echo "🔍 Linting and fixing..."
-  yarn lint:fix
+  bun run lint:fix
 else
   echo "🔍 Linting..."
-  yarn lint
+  bun run lint
 fi
 
 # 3. Type Checking
 echo "⌨️  Type checking..."
-yarn tsc --noEmit --skipLibCheck
+bun run tsc --noEmit --skipLibCheck
 
 # 4. Build
 echo "🏗️  Building..."
-yarn build
+bun run build
 
 # 5. Tests
 echo "🧪 Running tests..."
-yarn test
+bun run test
 
 echo "✅ Validation complete! All checks passed."

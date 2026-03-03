@@ -67,7 +67,7 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 ### Prerequisites
 
 - NodeJS (v22+)
-- NPM or Yarn
+- bun (v1.3.9+)
 
 ### Install Dependencies
 
