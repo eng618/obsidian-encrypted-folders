@@ -5,7 +5,7 @@
     "": {
       "name": "obsidian-encrypted-folders",
       "devDependencies": {
-        "@eng618/prettier-config": "^2.6.0",
+        "@eng618/prettier-config": "^2.10.0",
         "@gv-tech/eslint-config": "^0.1.8",
         "@types/node": "^25.3.3",
         "@typescript-eslint/eslint-plugin": "^8.46.2",
@@ -71,7 +71,7 @@
 
     "@date-vir/duration": ["@date-vir/duration@8.2.0", "", { "dependencies": { "@augment-vir/assert": "^31.66.0", "@types/luxon": "^3.7.1", "luxon": "^3.7.2", "type-fest": "^5.4.4" } }, "sha512-LdGi0s4y+H9XJj87m/sBBy5aIxl8kN9haI3IV9Znnyx5eKoLHkwuCAzrB77GHZp3uEacCiCYDvRTefrItYh1uw=="],
 
-    "@eng618/prettier-config": ["@eng618/prettier-config@2.9.1", "", { "dependencies": { "@homer0/prettier-plugin-jsdoc": "^11.0.2", "prettier-plugin-curly": "^0.4.1", "prettier-plugin-multiline-arrays": "^4.1.4", "prettier-plugin-organize-imports": "^4.3.0", "prettier-plugin-packagejson": "^3.0.0", "prettier-plugin-prisma": "^5.0.0", "prettier-plugin-sh": "^0.18.0", "prettier-plugin-sql": "^0.19.2", "prettier-plugin-tailwindcss": "^0.7.2" }, "peerDependencies": { "prettier": ">=3.0.0", "typescript": ">=5.0.0" }, "optionalPeers": ["typescript"] }, "sha512-n8rdHHIbj5OxxZxvc7tuJthNFBe90z9HjUCW482HNUgxHWYkc7T+wOuks1FLyx/Igwv4dBsV/w6WTA8xCkXreg=="],
+    "@eng618/prettier-config": ["@eng618/prettier-config@2.10.0", "", { "dependencies": { "@homer0/prettier-plugin-jsdoc": "^11.0.2", "prettier-plugin-curly": "^0.4.1", "prettier-plugin-multiline-arrays": "^4.1.4", "prettier-plugin-organize-imports": "^4.3.0", "prettier-plugin-packagejson": "^3.0.0", "prettier-plugin-prisma": "^5.0.0", "prettier-plugin-sh": "^0.18.0", "prettier-plugin-sql": "^0.19.2", "prettier-plugin-tailwindcss": "^0.7.2" }, "peerDependencies": { "prettier": ">=3.0.0", "typescript": ">=5.0.0" }, "optionalPeers": ["typescript"] }, "sha512-rRESR1NPsrE0RE3SCj6TVD9/YhPcfXzaaeo69fLgpQQwmGRmWokPy0IY8GBhJeAOJdUCboqeAp58RDVk8ulEgw=="],
 
     "@esbuild/aix-ppc64": ["@esbuild/aix-ppc64@0.27.3", "", { "os": "aix", "cpu": "ppc64" }, "sha512-9fJMTNFTWZMh5qwrBItuziu834eOCUcEqymSH7pY+zoMVEZg3gcPuBNxH1EvfVYe9h0x/Ptw8KBzv7qxb7l8dg=="],
 
