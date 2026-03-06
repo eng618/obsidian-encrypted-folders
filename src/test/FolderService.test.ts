@@ -275,4 +275,144 @@ describe('FolderService Integration', () => {
     const success = await folderService.unlockFolder(folder, 'anypass');
     expect(success).toBe(false);
   });
+
+  it('should recursively detect encrypted folders on sync', async () => {
+    const parent = new TFolder();
+    parent.path = 'nested';
+    parent.children = [];
+    (app.vault as any).files.set(parent.path, parent);
+
+    const folder = new TFolder();
+    folder.path = 'nested/secret';
+    folder.children = [];
+    folder.parent = parent;
+    parent.children.push(folder);
+    (app.vault as any).files.set(folder.path, folder);
+
+    await folderService.createEncryptedFolder(folder, 'password123', true);
+
+    const freshService = new FolderService(encryptionService, fileService, app);
+    await freshService.syncFolders();
+
+    expect(freshService.isEncryptedFolder(folder)).toBe(true);
+  });
+
+  it('should require migration when only legacy metadata exists', async () => {
+    const folder = new TFolder();
+    folder.path = 'legacy';
+    folder.children = [];
+    (app.vault as any).files.set(folder.path, folder);
+
+    const legacyMetadata = {
+      version: 1,
+      id: 'legacy-id',
+      encryptionMethod: 'AES-256-GCM',
+      kdfMethod: 'PBKDF2-SHA256',
+      salt: 'AQIDBA==',
+      iterations: 600000,
+      lockFile: '.obsidian-folder-meta',
+      testToken: 'AQID',
+      wrappedMasterKey: 'AQID',
+      masterKeyIV: 'AQID',
+    };
+
+    await fileService.writeBinary(
+      'legacy/.obsidian-folder-meta',
+      new TextEncoder().encode(JSON.stringify(legacyMetadata)).buffer,
+    );
+
+    await expect(folderService.unlockFolder(folder, 'anything')).rejects.toThrow('Legacy metadata detected');
+
+    const migrated = await folderService.migrateFolderMetadata(folder);
+    expect(migrated).toBe(true);
+    expect((app.vault as any).files.has('legacy/.obsidian-folder-meta')).toBe(false);
+    expect((app.vault as any).files.has('legacy/obsidian-folder-meta.json')).toBe(true);
+  });
+
+  it('should journal lock and unlock metadata state transitions', async () => {
+    const folder = new TFolder();
+    folder.path = 'journal';
+    folder.children = [];
+    (app.vault as any).files.set(folder.path, folder);
+
+    const file = new TFile();
+    file.name = 'note.md';
+    file.path = 'journal/note.md';
+    file.stat = { size: 10, mtime: 0, ctime: 0 };
+    (file as any).data = new TextEncoder().encode('my secret').buffer;
+    file.parent = folder;
+    folder.children.push(file);
+    (app.vault as any).files.set(file.path, file);
+
+    await folderService.createEncryptedFolder(folder, 'password123');
+    await folderService.lockFolder(folder);
+
+    const metaLocked = app.vault.getAbstractFileByPath('journal/obsidian-folder-meta.json') as TFile;
+    const lockedData = await app.vault.readBinary(metaLocked);
+    const lockedState = JSON.parse(new TextDecoder().decode(lockedData));
+    expect(lockedState.state).toBe('locked');
+
+    await folderService.unlockFolder(folder, 'password123');
+
+    const metaUnlocked = app.vault.getAbstractFileByPath('journal/obsidian-folder-meta.json') as TFile;
+    const unlockedData = await app.vault.readBinary(metaUnlocked);
+    const unlockedState = JSON.parse(new TextDecoder().decode(unlockedData));
+    expect(unlockedState.state).toBe('unlocked');
+  });
+
+  it('should fail unlock when locked payload files are still syncing', async () => {
+    const folder = new TFolder();
+    folder.path = 'sync-gap';
+    folder.children = [];
+    (app.vault as any).files.set(folder.path, folder);
+
+    const file = new TFile();
+    file.name = 'note.md';
+    file.path = 'sync-gap/note.md';
+    file.stat = { size: 10, mtime: 0, ctime: 0 };
+    (file as any).data = new TextEncoder().encode('my secret').buffer;
+    file.parent = folder;
+    folder.children.push(file);
+    (app.vault as any).files.set(file.path, file);
+
+    await folderService.createEncryptedFolder(folder, 'password123', true);
+
+    const lockedFile = app.vault.getAbstractFileByPath('sync-gap/note.md.locked') as TFile;
+    expect(lockedFile).toBeDefined();
+
+    await app.vault.delete(lockedFile);
+
+    const success = await folderService.unlockFolder(folder, 'password123');
+    expect(success).toBe(false);
+    expect(folderService.isUnlocked(folder)).toBe(false);
+
+    const metaFile = app.vault.getAbstractFileByPath('sync-gap/obsidian-folder-meta.json') as TFile;
+    const metaData = await app.vault.readBinary(metaFile);
+    const metadata = JSON.parse(new TextDecoder().decode(metaData));
+    expect(metadata.state).toBe('error');
+    expect(metadata.lastError).toContain('Encrypted files are still syncing');
+  });
+
+  it('should lock and unlock an empty encrypted folder without getting stuck', async () => {
+    const folder = new TFolder();
+    folder.path = 'empty-folder';
+    folder.children = [];
+    (app.vault as any).files.set(folder.path, folder);
+
+    await folderService.createEncryptedFolder(folder, 'password123', true);
+
+    const metaFile = app.vault.getAbstractFileByPath('empty-folder/obsidian-folder-meta.json') as TFile;
+    const lockedMetaData = await app.vault.readBinary(metaFile);
+    const lockedMetadata = JSON.parse(new TextDecoder().decode(lockedMetaData));
+    expect(lockedMetadata.state).toBe('locked');
+    expect(lockedMetadata.expectedLockedFiles).toBe(0);
+
+    const unlockSuccess = await folderService.unlockFolder(folder, 'password123');
+    expect(unlockSuccess).toBe(true);
+    expect(folderService.isUnlocked(folder)).toBe(true);
+
+    const unlockedMetaData = await app.vault.readBinary(metaFile);
+    const unlockedMetadata = JSON.parse(new TextDecoder().decode(unlockedMetaData));
+    expect(unlockedMetadata.state).toBe('unlocked');
+  });
 });

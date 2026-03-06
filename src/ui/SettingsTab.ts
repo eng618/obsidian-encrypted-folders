@@ -32,8 +32,7 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
       .setName('Active Session')
       .setDesc('Any folders unlocked in this session will be listed here.')
       .then((s) => {
-        const folderService = this.plugin.folderService as unknown as { unlockedFolders: Map<string, CryptoKey> };
-        const unlocked = Array.from(folderService.unlockedFolders.keys());
+        const unlocked = this.plugin.folderService.getUnlockedFolderPaths();
         if (unlocked.length === 0) {
           s.setDesc('No folders are currently unlocked.');
         } else {
@@ -42,8 +41,23 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName('Backup Encrypted Keys')
-      .setDesc('Cloud backup and multi-device sync is coming soon.')
-      .addToggle((toggle) => toggle.setValue(false).setDisabled(true));
+      .setName('Sync diagnostics')
+      .setDesc('Enable debug logs for cross-device sync detection, migration, and lock state transitions.')
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.debugLogging).onChange(async (value) => {
+          this.plugin.settings.debugLogging = value;
+          await this.plugin.saveSettings();
+        }),
+      );
+
+    new Setting(containerEl)
+      .setName('Rescan encrypted folders')
+      .setDesc('Force a vault-wide encrypted folder scan. Use this after sync or migration events.')
+      .addButton((btn) =>
+        btn.setButtonText('Run scan').onClick(async () => {
+          await this.plugin.folderService.syncFolders();
+          new Notice('Encrypted folder scan complete.');
+        }),
+      );
   }
 }

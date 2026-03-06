@@ -1,14 +1,18 @@
-import { App, TFile, TFolder } from 'obsidian';
-import { FolderMetadata } from '../models/FolderState';
+import { App, TFile, TFolder, normalizePath } from 'obsidian';
+import { FolderLifecycleState, FolderMetadata } from '../models/FolderState';
 import { EncryptionService } from './EncryptionService';
 import { FileService } from './FileService';
 
 export class FolderService {
   private unlockedFolders: Map<string, CryptoKey> = new Map();
   private encryptedFolders: Set<string> = new Set();
+  private syncDebounceTimer: number | null = null;
+  private debugLogging = false;
+
   private readonly META_FILE_NAME = 'obsidian-folder-meta.json';
   private readonly OLD_META_FILE_NAME = '.obsidian-folder-meta';
   private readonly LOCKED_EXTENSION = '.locked';
+  private readonly META_SCHEMA_VERSION = 2;
   private readonly README_FILE_NAME = 'README_ENCRYPTED.md';
   private readonly README_CONTENT = `
 # 🔒 Folder Encrypted
@@ -29,38 +33,208 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     private app: App,
   ) {}
 
-  /**
-   * Creates a new encrypted folder.
-   *
-   * @param folder The folder to encrypt.
-   * @param password The password for the folder.
-   */
+  setDebugLogging(enabled: boolean): void {
+    this.debugLogging = enabled;
+  }
+
+  getUnlockedFolderPaths(): string[] {
+    return Array.from(this.unlockedFolders.keys());
+  }
+
+  requestSyncFolders(reason = 'event'): void {
+    if (this.syncDebounceTimer) {
+      window.clearTimeout(this.syncDebounceTimer);
+    }
+
+    this.syncDebounceTimer = window.setTimeout(() => {
+      this.syncDebounceTimer = null;
+      void this.syncFolders(4, 300).catch((error: unknown) => {
+        this.debug('syncFolders failed after request', { reason, error });
+      });
+    }, 250);
+  }
+
+  private debug(message: string, data?: unknown): void {
+    if (!this.debugLogging) {
+      return;
+    }
+
+    if (data === undefined) {
+      console.info(`[EncryptedFolders] ${message}`);
+      return;
+    }
+
+    console.info(`[EncryptedFolders] ${message}`, data);
+  }
+
+  private toFolderKey(path: string): string {
+    return normalizePath(path);
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private getMetaPath(folderPath: string): string {
+    return normalizePath(`${folderPath}/${this.META_FILE_NAME}`);
+  }
+
+  private getOldMetaPath(folderPath: string): string {
+    return normalizePath(`${folderPath}/${this.OLD_META_FILE_NAME}`);
+  }
+
+  private getReadmePath(folderPath: string): string {
+    return normalizePath(`${folderPath}/${this.README_FILE_NAME}`);
+  }
+
+  private hasLegacyMetadata(folder: TFolder): boolean {
+    return this.fileService.exists(this.getOldMetaPath(folder.path));
+  }
+
+  needsMetadataMigration(folder: TFolder): boolean {
+    return this.hasLegacyMetadata(folder) && !this.fileService.exists(this.getMetaPath(folder.path));
+  }
+
+  private ensureCurrentSchema(metadata: FolderMetadata): FolderMetadata {
+    if (metadata.schemaVersion && metadata.schemaVersion >= this.META_SCHEMA_VERSION) {
+      return metadata;
+    }
+
+    return {
+      ...metadata,
+      schemaVersion: this.META_SCHEMA_VERSION,
+      state: metadata.state ?? 'locked',
+      lastTransitionAt: Date.now(),
+      lastError: undefined,
+    };
+  }
+
+  private async readMetadata(folder: TFolder): Promise<FolderMetadata | null> {
+    const metaFile = this.fileService.getFile(this.getMetaPath(folder.path));
+    if (!metaFile) {
+      return null;
+    }
+
+    const contentBuffer = await this.fileService.readBinary(metaFile);
+    const contentStr = new TextDecoder().decode(contentBuffer);
+    const metadata = JSON.parse(contentStr) as FolderMetadata;
+    return this.ensureCurrentSchema(metadata);
+  }
+
+  private async writeMetadata(folderPath: string, metadata: FolderMetadata): Promise<void> {
+    const metaPath = this.getMetaPath(folderPath);
+    const content = JSON.stringify(metadata, null, 2);
+    await this.fileService.writeBinary(metaPath, new TextEncoder().encode(content).buffer);
+  }
+
+  private async transitionMetadataState(
+    folder: TFolder,
+    metadata: FolderMetadata,
+    state: FolderLifecycleState,
+    lastError?: string,
+  ): Promise<FolderMetadata> {
+    const nextMetadata: FolderMetadata = {
+      ...metadata,
+      schemaVersion: this.META_SCHEMA_VERSION,
+      state,
+      lastTransitionAt: Date.now(),
+      lastError,
+    };
+
+    await this.writeMetadata(folder.path, nextMetadata);
+    this.debug('metadata state transition', { folder: folder.path, state, hasError: Boolean(lastError) });
+    return nextMetadata;
+  }
+
+  private async countLockedFiles(folder: TFolder): Promise<number> {
+    const stack: TFolder[] = [folder];
+    let count = 0;
+
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      const children = [...current.children];
+      for (const child of children) {
+        if (child instanceof TFolder) {
+          stack.push(child);
+          continue;
+        }
+
+        if (child.path.endsWith(this.LOCKED_EXTENSION)) {
+          count += 1;
+        }
+      }
+    }
+
+    return count;
+  }
+
+  async reconcileFolderState(folder: TFolder): Promise<void> {
+    const metadata = await this.readMetadata(folder);
+    if (!metadata) {
+      return;
+    }
+
+    if (metadata.state === 'locking') {
+      const readmePath = this.getReadmePath(folder.path);
+      if (!this.fileService.exists(readmePath)) {
+        await this.fileService.writeBinary(readmePath, new TextEncoder().encode(this.README_CONTENT).buffer);
+      }
+      await this.transitionMetadataState(folder, metadata, 'locked');
+      return;
+    }
+
+    if (metadata.state === 'unlocking') {
+      const lockedFiles = await this.countLockedFiles(folder);
+      const nextState: FolderLifecycleState = lockedFiles === 0 ? 'unlocked' : 'locked';
+      await this.transitionMetadataState(folder, metadata, nextState);
+    }
+  }
+
+  async migrateFolderMetadata(folder: TFolder): Promise<boolean> {
+    const oldMetaPath = this.getOldMetaPath(folder.path);
+    const oldMetaFile = this.fileService.getFile(oldMetaPath);
+    if (!oldMetaFile) {
+      return false;
+    }
+
+    const contentBuffer = await this.fileService.readBinary(oldMetaFile);
+    const contentStr = new TextDecoder().decode(contentBuffer);
+    const rawMetadata = JSON.parse(contentStr) as FolderMetadata;
+    const migratedMetadata = this.ensureCurrentSchema(rawMetadata);
+
+    await this.writeMetadata(folder.path, migratedMetadata);
+    await this.app.vault.delete(oldMetaFile);
+
+    this.encryptedFolders.add(this.toFolderKey(folder.path));
+    this.debug('legacy metadata migrated', { folder: folder.path });
+    return true;
+  }
+
   async createEncryptedFolder(folder: TFolder, password: string, lockImmediately = false): Promise<string> {
     if (this.isInsideEncryptedFolder(folder)) {
       throw new Error('Nested encryption is not allowed. A parent folder is already encrypted.');
     }
+
     const recoveryKey = this.generateRecoveryKey();
     const masterKey = await this.encryptionService.generateMasterKey();
     const masterKeyRaw = await this.encryptionService.exportKey(masterKey);
 
-    // 1. Password wrapping
     const salt = this.encryptionService.generateSalt();
     const derivedKey = await this.encryptionService.deriveKey(password, salt);
     const wrappedResult = await this.encryptionService.encryptWithKey(masterKeyRaw, derivedKey);
 
-    // 2. Recovery wrapping
     const recoverySalt = this.encryptionService.generateSalt();
     const recoveryDerivedKey = await this.encryptionService.deriveKey(recoveryKey, recoverySalt);
     const recoveryWrappedResult = await this.encryptionService.encryptWithKey(masterKeyRaw, recoveryDerivedKey);
 
-    // 3. Test token (using the master key to verify we can decrypt later)
     const testPhrase = 'OBSIDIAN_ENCRYPTED_VERIFICATION';
     const encoder = new TextEncoder();
     const testResult = await this.encryptionService.encryptWithKey(encoder.encode(testPhrase).buffer, masterKey);
     const combinedToken = this.combineBuffers(testResult.iv, testResult.ciphertext);
 
-    const metadata: FolderMetadata = {
-      version: 1,
+    let metadata: FolderMetadata = {
+      version: 2,
+      schemaVersion: this.META_SCHEMA_VERSION,
       id: window.crypto.randomUUID(),
       encryptionMethod: 'AES-256-GCM',
       kdfMethod: 'PBKDF2-SHA256',
@@ -73,31 +247,40 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       recoverySalt: this.arrayBufferToBase64(recoverySalt),
       wrappedMasterKeyRecovery: this.arrayBufferToBase64(recoveryWrappedResult.ciphertext),
       recoveryIV: this.arrayBufferToBase64(recoveryWrappedResult.iv),
+      state: lockImmediately ? 'locking' : 'unlocked',
+      lastTransitionAt: Date.now(),
     };
 
-    const metaPath = `${folder.path}/${this.META_FILE_NAME}`;
-    const jsonString = JSON.stringify(metadata, null, 2);
-    const encoder2 = new TextEncoder();
-    await this.fileService.writeBinary(metaPath, encoder2.encode(jsonString).buffer);
+    await this.writeMetadata(folder.path, metadata);
 
-    // Only encrypt contents if the user wants to lock immediately
     if (lockImmediately) {
-      await this.encryptFolderContents(folder, masterKey);
-
-      // Create informational readme to show the folder is locked
-      const readmePath = `${folder.path}/${this.README_FILE_NAME}`;
-      await this.fileService.writeBinary(readmePath, new TextEncoder().encode(this.README_CONTENT).buffer);
+      try {
+        const encryptedCount = await this.encryptFolderContents(folder, masterKey);
+        metadata = {
+          ...metadata,
+          expectedLockedFiles: encryptedCount,
+        };
+        await this.fileService.writeBinary(
+          this.getReadmePath(folder.path),
+          new TextEncoder().encode(this.README_CONTENT).buffer,
+        );
+        metadata = await this.transitionMetadataState(folder, metadata, 'locked');
+      } catch (error) {
+        await this.transitionMetadataState(folder, metadata, 'error', String(error));
+        throw error;
+      }
     } else {
-      // Otherwise, keep it "Unlocked" in memory for continued editing
-      this.unlockedFolders.set(folder.path, masterKey);
+      this.unlockedFolders.set(this.toFolderKey(folder.path), masterKey);
+      metadata = await this.transitionMetadataState(folder, metadata, 'unlocked');
     }
 
-    this.encryptedFolders.add(folder.path);
+    this.encryptedFolders.add(this.toFolderKey(folder.path));
+    this.debug('encrypted folder created', { folder: folder.path, state: metadata.state });
     return recoveryKey;
   }
 
   private generateRecoveryKey(): string {
-    const charset = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Base57 (no 0, O, I, l)
+    const charset = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let ret = '';
     const bytes = new Uint8Array(32);
     window.crypto.getRandomValues(bytes);
@@ -110,9 +293,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     return ret;
   }
 
-  async encryptFolderContents(folder: TFolder, key: CryptoKey): Promise<void> {
-    // Collect children first to avoid iteration issues when files are deleted/created
+  async encryptFolderContents(folder: TFolder, key: CryptoKey): Promise<number> {
     const children = [...folder.children];
+    let encryptedCount = 0;
     for (const child of children) {
       if (child instanceof TFile) {
         if (
@@ -122,11 +305,16 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
         ) {
           continue;
         }
-        await this.encryptFile(child, key);
+        const encrypted = await this.encryptFile(child, key);
+        if (encrypted) {
+          encryptedCount += 1;
+        }
       } else if (child instanceof TFolder) {
-        await this.encryptFolderContents(child, key);
+        encryptedCount += await this.encryptFolderContents(child, key);
       }
     }
+
+    return encryptedCount;
   }
 
   async decryptFolderContents(folder: TFolder, key: CryptoKey): Promise<void> {
@@ -147,22 +335,19 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
   }
 
-  async encryptFile(file: TFile, key: CryptoKey): Promise<void> {
+  async encryptFile(file: TFile, key: CryptoKey): Promise<boolean> {
     const data = await this.fileService.readBinary(file);
     if (this.hasMagic(data)) {
-      return;
+      return false;
     }
 
     const result = await this.encryptionService.encryptWithKey(data, key);
     const combined = this.combineBuffersWithMagic(result.iv, result.ciphertext);
+    const newPath = normalizePath(file.path + this.LOCKED_EXTENSION);
 
-    const newPath = file.path + this.LOCKED_EXTENSION;
-
-    // 1. Write the encrypted version
     await this.fileService.writeBinary(newPath, combined);
-
-    // 2. Shred and delete the original plaintext version
     await this.fileService.shredFile(file);
+    return true;
   }
 
   async decryptFile(file: TFile, key: CryptoKey): Promise<void> {
@@ -173,7 +358,6 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
     const { iv, ciphertext } = this.splitMagicBuffer(data);
     try {
-      // Ensure we pass the exact buffer views to SubtleCrypto
       const plaintext = await this.encryptionService.decryptWithKey(
         ciphertext as BufferSource,
         key,
@@ -184,15 +368,16 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       if (newPath.endsWith(this.LOCKED_EXTENSION)) {
         newPath = newPath.slice(0, -this.LOCKED_EXTENSION.length);
       } else {
-        newPath = newPath + '.decrypted'; // Fallback
+        newPath = `${newPath}.decrypted`;
       }
 
       await this.fileService.writeBinary(newPath, plaintext);
       await this.app.vault.delete(file);
-    } catch (e) {
+    } catch (error: unknown) {
+      const err = error as { name?: string; message?: string };
       const errorMsg =
         `Failed to decrypt file: ${file.path}\n` +
-        `  Error: ${e.name} - ${e.message}\n` +
+        `  Error: ${err.name ?? 'UnknownError'} - ${err.message ?? 'Unknown message'}\n` +
         `  File Size: ${data.byteLength}\n` +
         `  IV Length: ${iv.byteLength}\n` +
         `  Ciphertext Length: ${ciphertext.byteLength}`;
@@ -229,7 +414,6 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     const headerOffset = this.MAGIC_BYTES.length;
     const ivOffset = headerOffset + 12;
 
-    // Use subarray for efficient view slicing
     const fullView = new Uint8Array(data);
     const iv = fullView.slice(headerOffset, ivOffset);
     const ciphertext = fullView.slice(ivOffset);
@@ -254,53 +438,59 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     return tmp.buffer;
   }
 
-  /** Scans the vault for encrypted folders to populate the synchronous cache. */
-  async syncFolders(): Promise<void> {
-    // Wait a brief moment for the vault to be ready
-    await new Promise((r) => setTimeout(r, 500));
+  private async scanAdapterTree(basePath: string, discovered: Set<string>): Promise<void> {
+    const result = await this.app.vault.adapter.list(basePath);
 
-    const files = this.app.vault.getFiles();
-    for (const file of files) {
-      if (file.name === this.META_FILE_NAME || file.name === this.OLD_META_FILE_NAME) {
-        if (file.parent) {
-          this.encryptedFolders.add(file.parent.path);
-        }
+    for (const filePath of result.files) {
+      if (filePath.endsWith(`/${this.META_FILE_NAME}`)) {
+        const folderPath = normalizePath(filePath.slice(0, -`/${this.META_FILE_NAME}`.length));
+        discovered.add(this.toFolderKey(folderPath));
       }
     }
 
-    // Also check the adapter for files that might not be indexed yet
-    try {
-      // We check recursively for common locations if needed,
-      // but for now let's use the adapter to check the root children at least
-      const rootRes = await this.app.vault.adapter.list('');
-      for (const folderPath of rootRes.folders) {
-        if (
-          (await this.app.vault.adapter.exists(`${folderPath}/${this.META_FILE_NAME}`)) ||
-          (await this.app.vault.adapter.exists(`${folderPath}/${this.OLD_META_FILE_NAME}`))
-        ) {
-          this.encryptedFolders.add(folderPath);
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to deep sync folders with adapter:', e);
+    for (const folderPath of result.folders) {
+      await this.scanAdapterTree(folderPath, discovered);
     }
   }
 
+  async syncFolders(retries = 3, retryDelayMs = 300): Promise<void> {
+    const discovered = new Set<string>();
+
+    const indexedFiles = this.app.vault.getFiles();
+    for (const file of indexedFiles) {
+      if (file.name === this.META_FILE_NAME) {
+        discovered.add(this.toFolderKey(file.parent?.path ?? ''));
+      }
+    }
+
+    try {
+      await this.scanAdapterTree('', discovered);
+    } catch (error) {
+      this.debug('adapter scan failed', error);
+    }
+
+    this.encryptedFolders = new Set(Array.from(discovered).filter((value) => value.length > 0));
+
+    if (this.encryptedFolders.size === 0 && retries > 1) {
+      await this.sleep(retryDelayMs);
+      await this.syncFolders(retries - 1, retryDelayMs);
+      return;
+    }
+
+    this.debug('syncFolders complete', { discovered: this.encryptedFolders.size });
+  }
+
   isEncryptedFolder(folder: TFolder): boolean {
-    // 1. Check synchronous cache
-    if (this.encryptedFolders.has(folder.path)) {
+    const folderKey = this.toFolderKey(folder.path);
+    if (this.encryptedFolders.has(folderKey)) {
       return true;
     }
 
-    // 2. Check vault index (if synced)
-    const metaPath = `${folder.path}/${this.META_FILE_NAME}`;
-    const oldMetaPath = `${folder.path}/${this.OLD_META_FILE_NAME}`;
-
+    const metaPath = this.getMetaPath(folder.path);
     const exists = this.fileService.exists(metaPath);
-    const oldExists = this.fileService.exists(oldMetaPath);
 
-    if (exists || oldExists) {
-      this.encryptedFolders.add(folder.path);
+    if (exists) {
+      this.encryptedFolders.add(folderKey);
       return true;
     }
 
@@ -310,8 +500,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   getEncryptedParent(file: TFile | TFolder): TFolder | null {
     let parent = file.parent;
     while (parent) {
-      // Check if this parent folder has the metadata file
-      const metaPath = `${parent.path}/${this.META_FILE_NAME}`;
+      const metaPath = this.getMetaPath(parent.path);
       if (this.fileService.getFile(metaPath)) {
         return parent;
       }
@@ -325,33 +514,51 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   }
 
   async unlockFolder(folder: TFolder, secret: string, isRecovery = false): Promise<boolean> {
-    const metaPath = `${folder.path}/${this.META_FILE_NAME}`;
-    const metaFile = this.fileService.getFile(metaPath);
-    if (!metaFile) {
+    if (this.hasLegacyMetadata(folder) && !this.fileService.exists(this.getMetaPath(folder.path))) {
+      throw new Error('Legacy metadata detected. Please migrate this folder metadata first.');
+    }
+
+    let metadata = await this.readMetadata(folder);
+    if (!metadata) {
       return false;
     }
 
-    const contentBuffer = await this.fileService.readBinary(metaFile);
-    const contentStr = new TextDecoder().decode(contentBuffer);
-    const metadata: FolderMetadata = JSON.parse(contentStr);
+    await this.reconcileFolderState(folder);
+    metadata = await this.readMetadata(folder);
+    if (!metadata) {
+      return false;
+    }
 
     try {
-      // 1. Derive key from password/recovery key
-      const salt = new Uint8Array(this.base64ToArrayBuffer(isRecovery ? metadata.recoverySalt! : metadata.salt));
+      const lockedFiles = await this.countLockedFiles(folder);
+      const expectedLockedFiles = metadata.expectedLockedFiles;
+      if (typeof expectedLockedFiles === 'number' && expectedLockedFiles > 0 && lockedFiles < expectedLockedFiles) {
+        throw new Error(
+          `Encrypted files are still syncing (${lockedFiles}/${expectedLockedFiles}). Please wait and try again.`,
+        );
+      }
+
+      metadata = await this.transitionMetadataState(folder, metadata, 'unlocking');
+
+      const encodedSalt = isRecovery ? metadata.recoverySalt : metadata.salt;
+      const wrappedMaster = isRecovery ? metadata.wrappedMasterKeyRecovery : metadata.wrappedMasterKey;
+      const wrappedIV = isRecovery ? metadata.recoveryIV : metadata.masterKeyIV;
+
+      if (!encodedSalt || !wrappedMaster || !wrappedIV) {
+        throw new Error('Metadata is missing required key material.');
+      }
+
+      const salt = new Uint8Array(this.base64ToArrayBuffer(encodedSalt));
       const derivedKey = await this.encryptionService.deriveKey(secret, salt);
 
-      // 2. Unwrap master key
-      const wrappedMK = new Uint8Array(
-        this.base64ToArrayBuffer(isRecovery ? metadata.wrappedMasterKeyRecovery! : metadata.wrappedMasterKey),
-      );
-      const mkIV = new Uint8Array(this.base64ToArrayBuffer(isRecovery ? metadata.recoveryIV! : metadata.masterKeyIV));
+      const wrappedMK = new Uint8Array(this.base64ToArrayBuffer(wrappedMaster));
+      const mkIV = new Uint8Array(this.base64ToArrayBuffer(wrappedIV));
 
       const masterKeyRaw = await this.encryptionService.decryptWithKey(wrappedMK, derivedKey, mkIV).catch(() => {
         throw new Error('Authentication failed: Invalid key');
       });
       const masterKey = await this.encryptionService.importKey(masterKeyRaw);
 
-      // 3. Verify master key with testToken
       const tokenData = new Uint8Array(this.base64ToArrayBuffer(metadata.testToken));
       const iv = tokenData.slice(0, 12);
       const ciphertext = tokenData.slice(12);
@@ -361,75 +568,102 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       });
       const resultStr = new TextDecoder().decode(resultBuffer);
 
-      if (resultStr === 'OBSIDIAN_ENCRYPTED_VERIFICATION') {
-        // CONTENT DECRYPTION MUST HAPPEN BEFORE MARKING AS UNLOCKED
-        // To ensure a transactional state.
-        await this.decryptFolderContents(folder, masterKey);
-
-        // Delete readme if it exists
-        const readmePath = `${folder.path}/${this.README_FILE_NAME}`;
-        const readmeFile = this.fileService.getFile(readmePath);
-        if (readmeFile) {
-          await this.app.vault.delete(readmeFile);
-        }
-
-        this.unlockedFolders.set(folder.path, masterKey);
-        return true;
-      } else {
+      if (resultStr !== 'OBSIDIAN_ENCRYPTED_VERIFICATION') {
         throw new Error('Authentication failed: Token mismatch');
       }
-    } catch (e) {
-      console.warn('Unlock error for folder:', folder.path, e);
-    }
 
-    return false;
+      await this.decryptFolderContents(folder, masterKey);
+
+      const readmeFile = this.fileService.getFile(this.getReadmePath(folder.path));
+      if (readmeFile) {
+        await this.app.vault.delete(readmeFile);
+      }
+
+      this.unlockedFolders.set(this.toFolderKey(folder.path), masterKey);
+      await this.transitionMetadataState(folder, metadata, 'unlocked');
+      this.debug('folder unlocked', { folder: folder.path, isRecovery });
+      return true;
+    } catch (error) {
+      await this.transitionMetadataState(folder, metadata, 'error', String(error));
+      this.debug('unlock error', { folder: folder.path, error });
+      return false;
+    }
   }
 
   async lockFolder(folder: TFolder): Promise<void> {
-    const key = this.unlockedFolders.get(folder.path);
-    if (key) {
-      await this.encryptFolderContents(folder, key);
+    const folderKey = this.toFolderKey(folder.path);
+    const key = this.unlockedFolders.get(folderKey);
+    if (!key) {
+      return;
+    }
 
-      // Create informational readme
-      const readmePath = `${folder.path}/${this.README_FILE_NAME}`;
-      await this.fileService.writeBinary(readmePath, new TextEncoder().encode(this.README_CONTENT).buffer);
+    let metadata = await this.readMetadata(folder);
+    if (!metadata) {
+      throw new Error('Cannot lock folder without metadata.');
+    }
 
-      this.unlockedFolders.delete(folder.path);
+    metadata = await this.transitionMetadataState(folder, metadata, 'locking');
+
+    try {
+      const encryptedCount = await this.encryptFolderContents(folder, key);
+      metadata = {
+        ...metadata,
+        expectedLockedFiles: encryptedCount,
+      };
+      await this.fileService.writeBinary(
+        this.getReadmePath(folder.path),
+        new TextEncoder().encode(this.README_CONTENT).buffer,
+      );
+      this.unlockedFolders.delete(folderKey);
+      await this.transitionMetadataState(folder, metadata, 'locked');
+      this.debug('folder locked', { folder: folder.path });
+    } catch (error) {
+      await this.transitionMetadataState(folder, metadata, 'error', String(error));
+      throw error;
     }
   }
 
   async lockAllFolders(): Promise<void> {
-    for (const [path, key] of this.unlockedFolders.entries()) {
+    for (const path of Array.from(this.unlockedFolders.keys())) {
       const folder = this.app.vault.getAbstractFileByPath(path);
       if (folder instanceof TFolder) {
-        await this.encryptFolderContents(folder, key);
+        await this.lockFolder(folder);
       }
     }
     this.unlockedFolders.clear();
   }
 
   isUnlocked(folder: TFolder): boolean {
-    return this.unlockedFolders.has(folder.path);
+    return this.unlockedFolders.has(this.toFolderKey(folder.path));
   }
 
   updatePath(oldPath: string, newPath: string): void {
-    const key = this.unlockedFolders.get(oldPath);
+    const oldKey = this.toFolderKey(oldPath);
+    const newKey = this.toFolderKey(newPath);
+
+    const key = this.unlockedFolders.get(oldKey);
     if (key) {
-      this.unlockedFolders.set(newPath, key);
-      this.unlockedFolders.delete(oldPath);
+      this.unlockedFolders.set(newKey, key);
+      this.unlockedFolders.delete(oldKey);
+    }
+
+    if (this.encryptedFolders.has(oldKey)) {
+      this.encryptedFolders.delete(oldKey);
+      this.encryptedFolders.add(newKey);
     }
   }
 
   removePath(path: string): void {
-    this.unlockedFolders.delete(path);
+    const key = this.toFolderKey(path);
+    this.unlockedFolders.delete(key);
+    this.encryptedFolders.delete(key);
   }
 
   getUnlockedKey(folder: TFolder): CryptoKey | undefined {
-    return this.unlockedFolders.get(folder.path);
+    return this.unlockedFolders.get(this.toFolderKey(folder.path));
   }
 
   async removeEncryption(folder: TFolder, password?: string, isRecovery = false): Promise<boolean> {
-    // 1. If folder is locked, we must unlock it first to restore plaintext files
     if (!this.isUnlocked(folder)) {
       if (!password) {
         throw new Error('Password is required to decrypt and remove encryption.');
@@ -440,40 +674,28 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       }
     }
 
-    // 2. Folder is now unlocked (plaintext files on disk). Clean up metadata.
-    const metaPath = `${folder.path}/${this.META_FILE_NAME}`;
-    const metaFile = this.fileService.getFile(metaPath);
+    const metaFile = this.fileService.getFile(this.getMetaPath(folder.path));
     if (metaFile) {
       await this.app.vault.delete(metaFile);
     }
 
-    // Also check for legacy meta file
-    const oldMetaPath = `${folder.path}/${this.OLD_META_FILE_NAME}`;
-    const oldMetaFile = this.fileService.getFile(oldMetaPath);
-    if (oldMetaFile) {
-      await this.app.vault.delete(oldMetaFile);
-    }
-
-    // Delete readme if it hasn't been deleted by unlockFolder already
-    const readmePath = `${folder.path}/${this.README_FILE_NAME}`;
-    const readmeFile = this.fileService.getFile(readmePath);
+    const readmeFile = this.fileService.getFile(this.getReadmePath(folder.path));
     if (readmeFile) {
       await this.app.vault.delete(readmeFile);
     }
 
-    // 3. Clear caches
-    this.unlockedFolders.delete(folder.path);
-    this.encryptedFolders.delete(folder.path);
+    this.unlockedFolders.delete(this.toFolderKey(folder.path));
+    this.encryptedFolders.delete(this.toFolderKey(folder.path));
 
     return true;
   }
 
   private base64ToArrayBuffer(base64: string): ArrayBuffer {
-    const binary_string = window.atob(base64);
-    const len = binary_string.length;
+    const binaryString = window.atob(base64);
+    const len = binaryString.length;
     const bytes = new Uint8Array(len);
     for (let i = 0; i < len; i++) {
-      bytes[i] = binary_string.charCodeAt(i);
+      bytes[i] = binaryString.charCodeAt(i);
     }
     return bytes.buffer;
   }

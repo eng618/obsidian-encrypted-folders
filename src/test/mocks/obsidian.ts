@@ -16,6 +16,47 @@ export class TFolder {
 
 export class Vault {
   files: Map<string, TFile | TFolder> = new Map();
+  adapter = {
+    list: vi.fn(async (path: string) => {
+      const normalizedBase = normalizePath(path || '');
+      const folderPrefix = normalizedBase.length > 0 ? `${normalizedBase}/` : '';
+      const files: string[] = [];
+      const folders = new Set<string>();
+
+      for (const filePath of this.files.keys()) {
+        if (normalizedBase.length > 0 && filePath !== normalizedBase && !filePath.startsWith(folderPrefix)) {
+          continue;
+        }
+
+        const relative = normalizedBase.length > 0 ? filePath.slice(folderPrefix.length) : filePath;
+        if (relative.length === 0) {
+          continue;
+        }
+
+        const firstSlash = relative.indexOf('/');
+        if (firstSlash === -1) {
+          if (this.files.get(filePath) instanceof TFile) {
+            files.push(filePath);
+          }
+          continue;
+        }
+
+        const childFolder = relative.slice(0, firstSlash);
+        const fullFolder = normalizePath(normalizedBase.length > 0 ? `${normalizedBase}/${childFolder}` : childFolder);
+        if (this.files.get(fullFolder) instanceof TFolder) {
+          folders.add(fullFolder);
+        }
+      }
+
+      return { files, folders: Array.from(folders) };
+    }),
+    exists: vi.fn(async (path: string) => this.files.has(normalizePath(path))),
+    writeBinary: vi.fn(async (path: string, data: ArrayBuffer) => {
+      await this.createBinary(path, data);
+    }),
+  };
+
+  on = vi.fn();
 
   readBinary = vi.fn(async (file: TFile) => {
     return file.data || new ArrayBuffer(0);
@@ -66,7 +107,11 @@ export class Vault {
   trash = vi.fn();
 
   getAbstractFileByPath = vi.fn((path: string) => {
-    return this.files.get(path) || null;
+    return this.files.get(normalizePath(path)) || null;
+  });
+
+  getFiles = vi.fn(() => {
+    return Array.from(this.files.values()).filter((file): file is TFile => file instanceof TFile);
   });
 }
 

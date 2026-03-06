@@ -24,6 +24,8 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 - **Auto-Lock Security**: All folders are automatically re-encrypted and locked when the plugin is disabled or Obsidian is closed.
 - **Exit Strategy**: Permanently remove encryption from a folder if you no longer need it, restoring files to normal plaintext Obsidian management.
 - **Integrity First**: Prevents nested encryption within already encrypted folders to ensure a simple, reliable vault structure.
+- **Sync-Safe State Tracking**: Lock and unlock operations are journaled in metadata to improve cross-device consistency during delayed or partial sync.
+- **Metadata Migration Tooling**: Folders using legacy metadata can be migrated in-place from the folder context menu.
 
 ## 🛡️ Security Specifications
 
@@ -61,6 +63,12 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 3. If the folder is locked, enter your password to restore files.
 4. Confirm the permanent removal.
 5. The plugin will restore all files to plaintext and delete the encryption metadata files (`obsidian-folder-meta.json` and `README_ENCRYPTED.md`).
+
+### Sync behavior across devices
+
+- The plugin continuously rescans and reconciles encrypted-folder metadata after file create/modify/rename/delete events.
+- If a sync operation lands while a folder is transitioning, metadata state (`locking` / `unlocking`) is reconciled on the receiving device.
+- Legacy folders that only have `.obsidian-folder-meta` must be migrated with **Migrate Folder Encryption Metadata** before unlocking.
 
 ## 🛠️ Development
 

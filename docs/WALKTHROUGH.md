@@ -6,10 +6,10 @@ This document provides a detailed overview of the plugin's features, security ar
 
 The plugin uses a **Master Key wrapping** strategy to ensure high security and flexibility.
 
-1.  **Master Key**: A unique AES-256-GCM key is generated for every encrypted folder.
-2.  **Password Wrapping**: The Master Key is encrypted with a key derived from your password using PBKDF2-SHA256 (600,000 iterations).
-3.  **Recovery Wrapping**: The Master Key is also encrypted with a 32-character recovery key.
-4.  **Data Encryption**: Your files are encrypted using the Master Key. This allows you to change your password in the future (planned feature) without re-encrypting every file.
+1. **Master Key**: A unique AES-256-GCM key is generated for every encrypted folder.
+2. **Password Wrapping**: The Master Key is encrypted with a key derived from your password using PBKDF2-SHA256 (600,000 iterations).
+3. **Recovery Wrapping**: The Master Key is also encrypted with a 32-character recovery key.
+4. **Data Encryption**: Your files are encrypted using the Master Key. This allows you to change your password in the future (planned feature) without re-encrypting every file.
 
 ## ✨ Key Features
 
@@ -65,11 +65,12 @@ This runs tests for:
 
 ### Manual Verification
 
-1.  **Check for Plaintext**: Open your vault folder in a standard file explorer while the folder is **locked**. Encrypted files will have a `.locked` extension. Try to open one; it should look like binary gibberish and start with `ENC!`.
-2.  **Check Meta-Data**: Inspect the `obsidian-folder-meta.json` file. It should contain base64 strings but **no secrets** in plaintext.
-3.  **Audit the Build**: Run `npm run lint` and `npm run build` to ensure the code is clean and follows standards.
+1. **Check for Plaintext**: Open your vault folder in a standard file explorer while the folder is **locked**. Encrypted files will have a `.locked` extension. Try to open one; it should look like binary gibberish and start with `ENC!`.
+2. **Check Meta-Data**: Inspect the `obsidian-folder-meta.json` file. It should contain base64 strings but **no secrets** in plaintext.
+3. **Audit the Build**: Run `npm run lint` and `npm run build` to ensure the code is clean and follows standards.
 
 ## ⚠️ Important Considerations
 
-- **Obsidian Sync**: If you use Obsidian Sync, be aware that if you unlock a folder, the sync might start uploading plaintext to your other devices. It is recommended to **lock folders before syncing** or exclude them from sync.
+- **Obsidian Sync and third-party sync**: The plugin now journals lock state transitions (`locking`, `locked`, `unlocking`, `unlocked`) in metadata and reconciles delayed sync updates automatically. If a folder is intentionally unlocked, plaintext may still sync by design; lock folders when you are done editing.
+- **Legacy metadata migration**: Older folders that only contain `.obsidian-folder-meta` must be migrated to `obsidian-folder-meta.json` before unlock.
 - **Crashes**: In the event of a hard system crash (blue screen, power loss) while a folder is unlocked, the files may remain in plaintext. Always lock sensitive folders when you are done.

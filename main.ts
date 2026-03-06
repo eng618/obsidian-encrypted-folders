@@ -8,11 +8,11 @@ import { RemovalModal } from './src/ui/RemovalModal';
 import { EncryptedFoldersSettingTab } from './src/ui/SettingsTab';
 
 interface EncryptedFoldersSettings {
-  mySetting: string;
+  debugLogging: boolean;
 }
 
 const DEFAULT_SETTINGS: EncryptedFoldersSettings = {
-  mySetting: 'default',
+  debugLogging: false,
 };
 
 export default class EncryptedFoldersPlugin extends Plugin {
@@ -28,6 +28,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
     this.encryptionService = new EncryptionService();
     this.fileService = new FileService(this.app.vault);
     this.folderService = new FolderService(this.encryptionService, this.fileService, this.app);
+    this.folderService.setDebugLogging(this.settings.debugLogging);
     await this.folderService.syncFolders();
 
     this.registerEvent(
@@ -43,6 +44,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
         if (file instanceof TFolder) {
           this.folderService.updatePath(oldPath, file.path);
         }
+        this.folderService.requestSyncFolders('rename');
       }),
     );
 
@@ -51,6 +53,25 @@ export default class EncryptedFoldersPlugin extends Plugin {
         if (file instanceof TFolder) {
           this.folderService.removePath(file.path);
         }
+        this.folderService.requestSyncFolders('delete');
+      }),
+    );
+
+    this.registerEvent(
+      this.app.vault.on('create', (file) => {
+        if (file instanceof TFolder) {
+          void this.folderService.reconcileFolderState(file);
+        }
+        this.folderService.requestSyncFolders('create');
+      }),
+    );
+
+    this.registerEvent(
+      this.app.vault.on('modify', (file) => {
+        if (file.parent instanceof TFolder) {
+          void this.folderService.reconcileFolderState(file.parent);
+        }
+        this.folderService.requestSyncFolders('modify');
       }),
     );
 
@@ -59,6 +80,26 @@ export default class EncryptedFoldersPlugin extends Plugin {
 
   handleFolderMenu(menu: Menu, folder: TFolder) {
     const isEncrypted = this.folderService.isEncryptedFolder(folder);
+    const needsMigration = this.folderService.needsMetadataMigration(folder);
+
+    if (needsMigration) {
+      menu.addItem((item) => {
+        item
+          .setTitle('Migrate Folder Encryption Metadata')
+          .setIcon('refresh-cw')
+          .onClick(async () => {
+            const migrated = await this.folderService.migrateFolderMetadata(folder);
+            if (migrated) {
+              new Notice('Metadata migrated. Folder is ready to unlock.');
+              await this.folderService.syncFolders();
+            } else {
+              new Notice('No legacy metadata found for this folder.');
+            }
+          });
+      });
+
+      menu.addSeparator();
+    }
 
     if (isEncrypted) {
       if (this.folderService.isUnlocked(folder)) {
@@ -175,5 +216,6 @@ export default class EncryptedFoldersPlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
+    this.folderService.setDebugLogging(this.settings.debugLogging);
   }
 }
