@@ -1,12 +1,11 @@
 {
-  "id": "obsidian-encrypted-folders",
+  "id": "encrypted-folders",
   "name": "Encrypted Folders",
   "version": "1.0.0",
   "minAppVersion": "1.10.0",
-  "description": "Obsidian plugin to encrypt folders within your vault.",
+  "description": "Encrypt and decrypt entire folders within your vault with AES-256-GCM.",
   "author": "Eric N. Garcia",
   "authorUrl": "https://garciaericn.com",
-  "license": "MIT",
   "fundingUrl": "https://www.buymeacoffee.com/eng618",
   "isDesktopOnly": false
 }
