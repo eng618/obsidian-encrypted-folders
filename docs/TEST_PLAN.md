@@ -124,6 +124,8 @@ Ensure the plugin core surface area is functional.
 
 Use this section to validate cross-device behavior with SyncTrain (or equivalent sync tooling).
 
+For setup and recommended SyncTrain configuration, see `docs/SYNCTRAIN_SETUP.md`.
+
 ### Preconditions
 
 - Device A and Device B point to the same synced vault.
