@@ -1,6 +1,6 @@
 {
   "name": "obsidian-encrypted-folders",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "private": true,
   "description": "Obsidian plugin to encrypt folders within your vault.",
   "keywords": [
