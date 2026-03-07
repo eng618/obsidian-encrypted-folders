@@ -17,6 +17,7 @@ jobs:
         id: release
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          include-v-in-tag: false
 
       # The following steps run when a release is created by release-please
       - uses: actions/checkout@v6
