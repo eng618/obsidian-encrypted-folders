@@ -21,7 +21,6 @@ export class FolderService {
   private debugLogging = false;
 
   private readonly META_FILE_NAME = 'obsidian-folder-meta.json';
-  private readonly OLD_META_FILE_NAME = '.obsidian-folder-meta';
   private readonly LOCKED_EXTENSION = '.locked';
   private readonly META_SCHEMA_VERSION = 2;
   private readonly README_FILE_NAME = 'README_ENCRYPTED.md';
@@ -117,10 +116,6 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
   private getMetaPath(folderPath: string): string {
     return normalizePath(`${folderPath}/${this.META_FILE_NAME}`);
-  }
-
-  private getOldMetaPath(folderPath: string): string {
-    return normalizePath(`${folderPath}/${this.OLD_META_FILE_NAME}`);
   }
 
   private getReadmePath(folderPath: string): string {
@@ -223,14 +218,6 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     return this.runAutoLock('idle', expiredPaths);
   }
 
-  private hasLegacyMetadata(folder: TFolder): boolean {
-    return this.fileService.exists(this.getOldMetaPath(folder.path));
-  }
-
-  needsMetadataMigration(folder: TFolder): boolean {
-    return this.hasLegacyMetadata(folder) && !this.fileService.exists(this.getMetaPath(folder.path));
-  }
-
   private ensureCurrentSchema(metadata: FolderMetadata): FolderMetadata {
     if (metadata.schemaVersion && metadata.schemaVersion >= this.META_SCHEMA_VERSION) {
       return metadata;
@@ -326,26 +313,6 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
   }
 
-  async migrateFolderMetadata(folder: TFolder): Promise<boolean> {
-    const oldMetaPath = this.getOldMetaPath(folder.path);
-    const oldMetaFile = this.fileService.getFile(oldMetaPath);
-    if (!oldMetaFile) {
-      return false;
-    }
-
-    const contentBuffer = await this.fileService.readBinary(oldMetaFile);
-    const contentStr = new TextDecoder().decode(contentBuffer);
-    const rawMetadata = JSON.parse(contentStr) as FolderMetadata;
-    const migratedMetadata = this.ensureCurrentSchema(rawMetadata);
-
-    await this.writeMetadata(folder.path, migratedMetadata);
-    await this.app.fileManager.trashFile(oldMetaFile);
-
-    this.encryptedFolders.add(this.toFolderKey(folder.path));
-    this.debug('legacy metadata migrated', { folder: folder.path });
-    return true;
-  }
-
   async createEncryptedFolder(folder: TFolder, password: string, lockImmediately = false): Promise<string> {
     if (this.isInsideEncryptedFolder(folder)) {
       throw new Error('Nested encryption is not allowed. A parent folder is already encrypted.');
@@ -435,11 +402,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     let encryptedCount = 0;
     for (const child of children) {
       if (child instanceof TFile) {
-        if (
-          child.name === this.META_FILE_NAME ||
-          child.name === this.OLD_META_FILE_NAME ||
-          child.name === this.README_FILE_NAME
-        ) {
+        if (child.name === this.META_FILE_NAME || child.name === this.README_FILE_NAME) {
           continue;
         }
         const encrypted = await this.encryptFile(child, key);
@@ -458,11 +421,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     const children = [...folder.children];
     for (const child of children) {
       if (child instanceof TFile) {
-        if (
-          child.name === this.META_FILE_NAME ||
-          child.name === this.OLD_META_FILE_NAME ||
-          child.name === this.README_FILE_NAME
-        ) {
+        if (child.name === this.META_FILE_NAME || child.name === this.README_FILE_NAME) {
           continue;
         }
         await this.decryptFile(child, key);
@@ -657,10 +616,6 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   }
 
   async unlockFolder(folder: TFolder, secret: string, isRecovery = false): Promise<boolean> {
-    if (this.hasLegacyMetadata(folder) && !this.fileService.exists(this.getMetaPath(folder.path))) {
-      throw new Error('Legacy metadata detected. Please migrate this folder metadata first.');
-    }
-
     let metadata = await this.readMetadata(folder);
     if (!metadata) {
       return false;

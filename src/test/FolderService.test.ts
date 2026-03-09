@@ -366,38 +366,6 @@ describe('FolderService Integration', () => {
     expect(freshService.isEncryptedFolder(folder)).toBe(true);
   });
 
-  it('should require migration when only legacy metadata exists', async () => {
-    const folder = new TFolder();
-    folder.path = 'legacy';
-    folder.children = [];
-    (app.vault as any).files.set(folder.path, folder);
-
-    const legacyMetadata = {
-      version: 1,
-      id: 'legacy-id',
-      encryptionMethod: 'AES-256-GCM',
-      kdfMethod: 'PBKDF2-SHA256',
-      salt: 'AQIDBA==',
-      iterations: 600000,
-      lockFile: '.obsidian-folder-meta',
-      testToken: 'AQID',
-      wrappedMasterKey: 'AQID',
-      masterKeyIV: 'AQID',
-    };
-
-    await fileService.writeBinary(
-      'legacy/.obsidian-folder-meta',
-      new TextEncoder().encode(JSON.stringify(legacyMetadata)).buffer,
-    );
-
-    await expect(folderService.unlockFolder(folder, 'anything')).rejects.toThrow('Legacy metadata detected');
-
-    const migrated = await folderService.migrateFolderMetadata(folder);
-    expect(migrated).toBe(true);
-    expect((app.vault as any).files.has('legacy/.obsidian-folder-meta')).toBe(false);
-    expect((app.vault as any).files.has('legacy/obsidian-folder-meta.json')).toBe(true);
-  });
-
   it('should journal lock and unlock metadata state transitions', async () => {
     const folder = new TFolder();
     folder.path = 'journal';

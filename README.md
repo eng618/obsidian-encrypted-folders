@@ -26,7 +26,6 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 - **Exit Strategy**: Permanently remove encryption from a folder if you no longer need it, restoring files to normal plaintext Obsidian management.
 - **Integrity First**: Prevents nested encryption within already encrypted folders to ensure a simple, reliable vault structure.
 - **Sync-Safe State Tracking**: Lock and unlock operations are journaled in metadata to improve cross-device consistency during delayed or partial sync.
-- **Metadata Migration Tooling**: Folders using legacy metadata can be migrated in-place from the folder context menu.
 
 ## 🛡️ Security Specifications
 
@@ -78,7 +77,6 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 - The plugin continuously rescans and reconciles encrypted-folder metadata after file create/modify/rename/delete events.
 - If a sync operation lands while a folder is transitioning, metadata state (`locking` / `unlocking`) is reconciled on the receiving device.
 - Background locking protects every unlocked folder at once, and per-folder inactivity locking reduces the chance that one forgotten unlocked folder stays open long enough to trigger cross-device sync conflicts.
-- Legacy folders that only have `.obsidian-folder-meta` must be migrated with **Migrate Folder Encryption Metadata** before unlocking.
 
 ## 🛠️ Development
 

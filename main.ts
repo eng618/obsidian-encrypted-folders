@@ -153,20 +153,6 @@ export default class EncryptedFoldersPlugin extends Plugin {
     this.folderService.recordActivityForItem(this.app.workspace.getActiveFile());
   }
 
-  private handleMigrateMetadataClick(folder: TFolder): void {
-    void this.runMigrateMetadata(folder);
-  }
-
-  private async runMigrateMetadata(folder: TFolder): Promise<void> {
-    const migrated = await this.folderService.migrateFolderMetadata(folder);
-    if (migrated) {
-      new Notice('Metadata migrated. Folder is ready to unlock.');
-      await this.folderService.syncFolders();
-    } else {
-      new Notice('No legacy metadata found for this folder.');
-    }
-  }
-
   private handleLockFolderClick(folder: TFolder): void {
     void this.runLockFolder(folder);
   }
@@ -178,20 +164,6 @@ export default class EncryptedFoldersPlugin extends Plugin {
 
   handleFolderMenu(menu: Menu, folder: TFolder) {
     const isEncrypted = this.folderService.isEncryptedFolder(folder);
-    const needsMigration = this.folderService.needsMetadataMigration(folder);
-
-    if (needsMigration) {
-      menu.addItem((item) => {
-        item
-          .setTitle('Migrate folder encryption metadata')
-          .setIcon('refresh-cw')
-          .onClick(() => {
-            this.handleMigrateMetadataClick(folder);
-          });
-      });
-
-      menu.addSeparator();
-    }
 
     if (isEncrypted) {
       if (this.folderService.isUnlocked(folder)) {

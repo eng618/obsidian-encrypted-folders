@@ -72,5 +72,4 @@ This runs tests for:
 ## ⚠️ Important Considerations
 
 - **Obsidian Sync and third-party sync**: The plugin now journals lock state transitions (`locking`, `locked`, `unlocking`, `unlocked`) in metadata and reconciles delayed sync updates automatically. If a folder is intentionally unlocked, plaintext may still sync by design; lock folders when you are done editing.
-- **Legacy metadata migration**: Older folders that only contain `.obsidian-folder-meta` must be migrated to `obsidian-folder-meta.json` before unlock.
 - **Crashes**: In the event of a hard system crash (blue screen, power loss) while a folder is unlocked, the files may remain in plaintext. Always lock sensitive folders when you are done.
