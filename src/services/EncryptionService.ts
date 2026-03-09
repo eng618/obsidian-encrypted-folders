@@ -26,6 +26,12 @@ export class EncryptionService implements IEncryptionService {
   private readonly KEY_LENGTH = 256;
   private readonly DIGEST = 'SHA-256';
 
+  private toArrayBuffer(view: Uint8Array): ArrayBuffer {
+    const copy = new Uint8Array(view.byteLength);
+    copy.set(view);
+    return copy.buffer;
+  }
+
   generateSalt(length = 16): Uint8Array {
     return window.crypto.getRandomValues(new Uint8Array(length));
   }
@@ -45,7 +51,7 @@ export class EncryptionService implements IEncryptionService {
       {
         name: 'PBKDF2',
 
-        salt: salt as BufferSource,
+        salt: this.toArrayBuffer(salt),
         iterations: this.ITERATIONS,
         hash: this.DIGEST,
       },
@@ -61,11 +67,11 @@ export class EncryptionService implements IEncryptionService {
     const ciphertext = await window.crypto.subtle.encrypt(
       {
         name: 'AES-GCM',
-        iv: iv as BufferSource,
+        iv: this.toArrayBuffer(iv),
         tagLength: 128,
       },
       key,
-      data as BufferSource,
+      data,
     );
     return {
       ciphertext,
@@ -78,11 +84,11 @@ export class EncryptionService implements IEncryptionService {
     return window.crypto.subtle.decrypt(
       {
         name: 'AES-GCM',
-        iv: iv as BufferSource,
+        iv,
         tagLength: 128,
       },
       key,
-      ciphertext as BufferSource,
+      ciphertext,
     );
   }
 
@@ -96,7 +102,7 @@ export class EncryptionService implements IEncryptionService {
 
   async decrypt(ciphertext: ArrayBuffer, password: string, iv: Uint8Array, salt: Uint8Array): Promise<ArrayBuffer> {
     const derivedKey = await this.deriveKey(password, salt);
-    return this.decryptWithKey(ciphertext, derivedKey, iv as BufferSource);
+    return this.decryptWithKey(ciphertext, derivedKey, this.toArrayBuffer(iv));
   }
 
   async generateMasterKey(): Promise<CryptoKey> {
@@ -112,9 +118,6 @@ export class EncryptionService implements IEncryptionService {
   }
 
   async importKey(data: ArrayBuffer): Promise<CryptoKey> {
-    return window.crypto.subtle.importKey('raw', data as BufferSource, { name: 'AES-GCM' }, true, [
-      'encrypt',
-      'decrypt',
-    ]);
+    return window.crypto.subtle.importKey('raw', data, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
   }
 }

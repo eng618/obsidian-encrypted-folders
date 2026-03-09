@@ -153,6 +153,29 @@ export default class EncryptedFoldersPlugin extends Plugin {
     this.folderService.recordActivityForItem(this.app.workspace.getActiveFile());
   }
 
+  private handleMigrateMetadataClick(folder: TFolder): void {
+    void this.runMigrateMetadata(folder);
+  }
+
+  private async runMigrateMetadata(folder: TFolder): Promise<void> {
+    const migrated = await this.folderService.migrateFolderMetadata(folder);
+    if (migrated) {
+      new Notice('Metadata migrated. Folder is ready to unlock.');
+      await this.folderService.syncFolders();
+    } else {
+      new Notice('No legacy metadata found for this folder.');
+    }
+  }
+
+  private handleLockFolderClick(folder: TFolder): void {
+    void this.runLockFolder(folder);
+  }
+
+  private async runLockFolder(folder: TFolder): Promise<void> {
+    await this.folderService.lockFolder(folder);
+    new Notice('Folder locked.');
+  }
+
   handleFolderMenu(menu: Menu, folder: TFolder) {
     const isEncrypted = this.folderService.isEncryptedFolder(folder);
     const needsMigration = this.folderService.needsMetadataMigration(folder);
@@ -162,14 +185,8 @@ export default class EncryptedFoldersPlugin extends Plugin {
         item
           .setTitle('Migrate folder encryption metadata')
           .setIcon('refresh-cw')
-          .onClick(async () => {
-            const migrated = await this.folderService.migrateFolderMetadata(folder);
-            if (migrated) {
-              new Notice('Metadata migrated. Folder is ready to unlock.');
-              await this.folderService.syncFolders();
-            } else {
-              new Notice('No legacy metadata found for this folder.');
-            }
+          .onClick(() => {
+            this.handleMigrateMetadataClick(folder);
           });
       });
 
@@ -182,9 +199,8 @@ export default class EncryptedFoldersPlugin extends Plugin {
           item
             .setTitle('Lock folder')
             .setIcon('lock')
-            .onClick(async () => {
-              await this.folderService.lockFolder(folder);
-              new Notice('Folder locked.');
+            .onClick(() => {
+              this.handleLockFolderClick(folder);
             });
         });
       } else {
@@ -234,7 +250,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
         item
           .setTitle('Permanently decrypt folder')
           .setIcon('trash-2')
-          .onClick(async () => {
+          .onClick(() => {
             const isLocked = !this.folderService.isUnlocked(folder);
             new RemovalModal(this.app, isLocked, async (password) => {
               try {
@@ -282,7 +298,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
   }
 
   onunload() {
-    this.folderService.lockAllFolders();
+    void this.folderService.lockAllFolders();
   }
 
   async loadSettings() {

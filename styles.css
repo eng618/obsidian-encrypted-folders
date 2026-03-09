@@ -14,3 +14,15 @@
 .password-strength-strong {
   color: var(--text-success);
 }
+
+.recovery-key-container {
+  padding: 15px;
+  margin: 20px 0;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--background-secondary);
+  font-family: var(--font-monospace);
+  font-size: 1.2em;
+  text-align: center;
+  user-select: all;
+}

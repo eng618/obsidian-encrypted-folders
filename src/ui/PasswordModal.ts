@@ -8,7 +8,7 @@ export class PasswordModal extends Modal {
   constructor(
     app: App,
     private title: string,
-    private onSubmit: (password: string, lockImmediately?: boolean) => void,
+    private onSubmit: (password: string, lockImmediately?: boolean) => void | Promise<void>,
     private showLockToggle = false,
   ) {
     super(app);
@@ -17,7 +17,7 @@ export class PasswordModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl('h2', { text: this.title });
+    new Setting(contentEl).setName(this.title).setHeading();
 
     const strengthEl = contentEl.createEl('div', {
       text: '',
@@ -88,7 +88,9 @@ export class PasswordModal extends Modal {
       return; // Enforce for encryption
     }
     this.close();
-    this.onSubmit(this.password, this.lockImmediately);
+    void Promise.resolve(this.onSubmit(this.password, this.lockImmediately)).catch((error: unknown) => {
+      console.error('Password modal submission failed', error);
+    });
   }
 
   onClose() {

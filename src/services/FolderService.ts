@@ -100,11 +100,11 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
 
     if (data === undefined) {
-      console.info(`[EncryptedFolders] ${message}`);
+      console.debug(`[EncryptedFolders] ${message}`);
       return;
     }
 
-    console.info(`[EncryptedFolders] ${message}`, data);
+    console.debug(`[EncryptedFolders] ${message}`, data);
   }
 
   private toFolderKey(path: string): string {
@@ -282,7 +282,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     return nextMetadata;
   }
 
-  private async countLockedFiles(folder: TFolder): Promise<number> {
+  private countLockedFiles(folder: TFolder): number {
     const stack: TFolder[] = [folder];
     let count = 0;
 
@@ -320,7 +320,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
 
     if (metadata.state === 'unlocking') {
-      const lockedFiles = await this.countLockedFiles(folder);
+      const lockedFiles = this.countLockedFiles(folder);
       const nextState: FolderLifecycleState = lockedFiles === 0 ? 'unlocked' : 'locked';
       await this.transitionMetadataState(folder, metadata, nextState);
     }
@@ -496,9 +496,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     const { iv, ciphertext } = this.splitMagicBuffer(data);
     try {
       const plaintext = await this.encryptionService.decryptWithKey(
-        ciphertext as BufferSource,
+        this.toArrayBuffer(ciphertext),
         key,
-        iv as BufferSource,
+        this.toArrayBuffer(iv),
       );
 
       let newPath = file.path;
@@ -573,6 +573,12 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     tmp.set(iv, 0);
     tmp.set(new Uint8Array(ciphertext), iv.byteLength);
     return tmp.buffer;
+  }
+
+  private toArrayBuffer(view: Uint8Array): ArrayBuffer {
+    const copy = new Uint8Array(view.byteLength);
+    copy.set(view);
+    return copy.buffer;
   }
 
   private async scanAdapterTree(basePath: string, discovered: Set<string>): Promise<void> {
@@ -667,7 +673,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
 
     try {
-      const lockedFiles = await this.countLockedFiles(folder);
+      const lockedFiles = this.countLockedFiles(folder);
       const expectedLockedFiles = metadata.expectedLockedFiles;
       if (typeof expectedLockedFiles === 'number' && expectedLockedFiles > 0 && lockedFiles < expectedLockedFiles) {
         throw new Error(

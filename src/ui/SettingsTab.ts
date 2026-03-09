@@ -20,9 +20,8 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
           .setButtonText('Lock all folders')
           .setWarning()
           .setTooltip('This will re-encrypt all content and clear keys from memory.')
-          .onClick(async () => {
-            await this.plugin.folderService.lockAllFolders();
-            new Notice('All folders locked.');
+          .onClick(() => {
+            void this.lockAllFolders();
           }),
       );
 
@@ -86,10 +85,19 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
       .setName('Rescan encrypted folders')
       .setDesc('Force a vault-wide encrypted folder scan. Use this after sync or migration events.')
       .addButton((btn) =>
-        btn.setButtonText('Run scan').onClick(async () => {
-          await this.plugin.folderService.syncFolders();
-          new Notice('Encrypted folder scan complete.');
+        btn.setButtonText('Run scan').onClick(() => {
+          void this.runEncryptedFolderScan();
         }),
       );
+  }
+
+  private async lockAllFolders(): Promise<void> {
+    await this.plugin.folderService.lockAllFolders();
+    new Notice('All folders locked.');
+  }
+
+  private async runEncryptedFolderScan(): Promise<void> {
+    await this.plugin.folderService.syncFolders();
+    new Notice('Encrypted folder scan complete.');
   }
 }

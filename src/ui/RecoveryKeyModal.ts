@@ -1,4 +1,4 @@
-import { App, Modal, Setting } from 'obsidian';
+import { App, ButtonComponent, Modal, Setting } from 'obsidian';
 
 export class RecoveryKeyModal extends Modal {
   constructor(
@@ -12,7 +12,7 @@ export class RecoveryKeyModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    contentEl.createEl('h2', { text: 'Folder encrypted successfully' });
+    new Setting(contentEl).setName('Folder encrypted successfully').setHeading();
     contentEl.createEl('p', {
       text: 'Please save this recovery key in a safe place. If you forget your password, this is the only way to recover your data.',
       cls: 'mod-warning',
@@ -20,19 +20,13 @@ export class RecoveryKeyModal extends Modal {
 
     const keyContainer = contentEl.createEl('div', {
       cls: 'recovery-key-container',
-      attr: {
-        style:
-          'padding: 15px; background: var(--background-secondary); border-radius: 4px; border: 1px solid var(--border-color); font-family: monospace; font-size: 1.2em; text-align: center; margin: 20px 0; user-select: all;',
-      },
     });
     keyContainer.setText(this.recoveryKey);
 
     new Setting(contentEl)
       .addButton((btn) =>
-        btn.setButtonText('Copy to clipboard').onClick(async () => {
-          await navigator.clipboard.writeText(this.recoveryKey);
-          btn.setButtonText('Copied!');
-          setTimeout(() => btn.setButtonText('Copy to clipboard'), 2000);
+        btn.setButtonText('Copy to clipboard').onClick(() => {
+          void this.copyRecoveryKey(btn);
         }),
       )
       .addButton((btn) =>
@@ -41,6 +35,12 @@ export class RecoveryKeyModal extends Modal {
           .setCta()
           .onClick(() => this.close()),
       );
+  }
+
+  private async copyRecoveryKey(button: ButtonComponent): Promise<void> {
+    await navigator.clipboard.writeText(this.recoveryKey);
+    button.setButtonText('Copied!');
+    window.setTimeout(() => button.setButtonText('Copy to clipboard'), 2000);
   }
 
   onClose() {

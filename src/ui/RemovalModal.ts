@@ -15,7 +15,7 @@ export class RemovalModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl('h2', { text: 'Remove encryption' });
+    new Setting(contentEl).setName('Remove encryption').setHeading();
 
     contentEl.createEl('p', {
       text: 'This will permanently remove encryption from this folder and restore it to a normal folder. This action cannot be undone.',
@@ -43,13 +43,8 @@ export class RemovalModal extends Modal {
         btn
           .setButtonText('Remove encryption')
           .setWarning()
-          .onClick(async () => {
-            if (this.isLocked && !this.password) {
-              new Notice('Password is required.');
-              return;
-            }
-            await this.onConfirm(this.password);
-            this.close();
+          .onClick(() => {
+            void this.confirmRemoval();
           }),
       )
       .addButton((btn) =>
@@ -59,17 +54,22 @@ export class RemovalModal extends Modal {
       );
 
     if (this.isLocked) {
-      contentEl.addEventListener('keypress', async (e) => {
+      contentEl.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
-          if (!this.password) {
-            new Notice('Password is required.');
-            return;
-          }
-          await this.onConfirm(this.password);
-          this.close();
+          void this.confirmRemoval();
         }
       });
     }
+  }
+
+  private async confirmRemoval(): Promise<void> {
+    if (this.isLocked && !this.password) {
+      new Notice('Password is required.');
+      return;
+    }
+
+    await this.onConfirm(this.password);
+    this.close();
   }
 
   onClose() {
