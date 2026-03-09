@@ -12,9 +12,9 @@ export class RecoveryKeyModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    contentEl.createEl('h2', { text: 'Folder Encrypted Successfully!' });
+    contentEl.createEl('h2', { text: 'Folder encrypted successfully' });
     contentEl.createEl('p', {
-      text: 'Please save this Recovery Key in a SAFE place. If you forget your password, this is the ONLY way to recover your data.',
+      text: 'Please save this recovery key in a safe place. If you forget your password, this is the only way to recover your data.',
       cls: 'mod-warning',
     });
 
@@ -29,10 +29,10 @@ export class RecoveryKeyModal extends Modal {
 
     new Setting(contentEl)
       .addButton((btn) =>
-        btn.setButtonText('Copy to Clipboard').onClick(async () => {
+        btn.setButtonText('Copy to clipboard').onClick(async () => {
           await navigator.clipboard.writeText(this.recoveryKey);
           btn.setButtonText('Copied!');
-          setTimeout(() => btn.setButtonText('Copy to Clipboard'), 2000);
+          setTimeout(() => btn.setButtonText('Copy to clipboard'), 2000);
         }),
       )
       .addButton((btn) =>

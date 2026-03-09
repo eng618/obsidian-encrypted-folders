@@ -21,7 +21,6 @@ export default [
       'dist/**',
     ],
   },
-  ...recommended,
   {
     files: ['**/*.ts', '**/*.tsx'],
     languageOptions: {
@@ -39,4 +38,5 @@ export default [
       ...obsidianRecommendedRules,
     },
   },
+  ...recommended,
 ];

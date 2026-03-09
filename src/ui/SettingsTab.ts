@@ -12,14 +12,12 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl('h2', { text: 'Encrypted Folders Settings' });
-
     new Setting(containerEl)
-      .setName('Security Actions')
+      .setName('Security actions')
       .setDesc('Immediately lock all currently unlocked folders.')
       .addButton((btn) =>
         btn
-          .setButtonText('Lock All Folders')
+          .setButtonText('Lock all folders')
           .setWarning()
           .setTooltip('This will re-encrypt all content and clear keys from memory.')
           .onClick(async () => {
@@ -29,7 +27,7 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName('Active Session')
+      .setName('Active session')
       .setDesc('Any folders unlocked in this session will be listed here.')
       .then((s) => {
         const unlocked = this.plugin.folderService.getUnlockedFolderPaths();

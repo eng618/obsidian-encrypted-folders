@@ -1,8 +1,16 @@
-/*
+.password-strength-message {
+  margin-bottom: 10px;
+  font-size: 0.8em;
+}
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.password-strength-weak {
+  color: var(--text-error);
+}
 
-If your plugin does not need CSS, delete this file.
+.password-strength-medium {
+  color: var(--text-warning);
+}
 
-*/
+.password-strength-strong {
+  color: var(--text-success);
+}

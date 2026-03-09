@@ -3,7 +3,10 @@ import { TFile, Vault, normalizePath } from 'obsidian';
 export class FileService {
   private readonly MAX_RANDOM_SIZE = 65536;
 
-  constructor(private vault: Vault) {}
+  constructor(
+    private vault: Vault,
+    private trashFile: (file: TFile) => Promise<void>,
+  ) {}
 
   /**
    * Reads a file as an ArrayBuffer.
@@ -72,7 +75,7 @@ export class FileService {
    * @param file The file to delete.
    */
   async deleteFile(file: TFile): Promise<void> {
-    await this.vault.trash(file, true); // Use system trash
+    await this.trashFile(file);
   }
 
   /**
@@ -85,7 +88,7 @@ export class FileService {
     const randomData = new Uint8Array(size);
     this.fillRandomValues(randomData);
     await this.vault.modifyBinary(file, randomData.buffer);
-    await this.vault.delete(file); // Permanent delete
+    await this.trashFile(file);
   }
 
   private fillRandomValues(buffer: Uint8Array): void {

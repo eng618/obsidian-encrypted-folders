@@ -26,7 +26,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
 
     // Initialize Services
     this.encryptionService = new EncryptionService();
-    this.fileService = new FileService(this.app.vault);
+    this.fileService = new FileService(this.app.vault, (file) => this.app.fileManager.trashFile(file));
     this.folderService = new FolderService(this.encryptionService, this.fileService, this.app);
     this.folderService.setDebugLogging(this.settings.debugLogging);
     await this.folderService.syncFolders();
@@ -85,7 +85,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
     if (needsMigration) {
       menu.addItem((item) => {
         item
-          .setTitle('Migrate Folder Encryption Metadata')
+          .setTitle('Migrate folder encryption metadata')
           .setIcon('refresh-cw')
           .onClick(async () => {
             const migrated = await this.folderService.migrateFolderMetadata(folder);
@@ -105,7 +105,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
       if (this.folderService.isUnlocked(folder)) {
         menu.addItem((item) => {
           item
-            .setTitle('Lock Folder')
+            .setTitle('Lock folder')
             .setIcon('lock')
             .onClick(async () => {
               await this.folderService.lockFolder(folder);
@@ -115,10 +115,10 @@ export default class EncryptedFoldersPlugin extends Plugin {
       } else {
         menu.addItem((item) => {
           item
-            .setTitle('Unlock Folder')
+            .setTitle('Unlock folder')
             .setIcon('unlock')
             .onClick(() => {
-              new PasswordModal(this.app, 'Unlock Folder', async (password) => {
+              new PasswordModal(this.app, 'Unlock folder', async (password) => {
                 try {
                   const success = await this.folderService.unlockFolder(folder, password);
                   if (success) {
@@ -135,10 +135,10 @@ export default class EncryptedFoldersPlugin extends Plugin {
 
         menu.addItem((item) => {
           item
-            .setTitle('Unlock with Recovery Key')
+            .setTitle('Unlock with recovery key')
             .setIcon('key')
             .onClick(() => {
-              new PasswordModal(this.app, 'Enter Recovery Key', async (recoveryKey) => {
+              new PasswordModal(this.app, 'Enter recovery key', async (recoveryKey) => {
                 try {
                   const success = await this.folderService.unlockFolder(folder, recoveryKey, true);
                   if (success) {
@@ -157,7 +157,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
       menu.addSeparator();
       menu.addItem((item) => {
         item
-          .setTitle('Permanently Decrypt Folder')
+          .setTitle('Permanently decrypt folder')
           .setIcon('trash-2')
           .onClick(async () => {
             const isLocked = !this.folderService.isUnlocked(folder);
@@ -183,12 +183,12 @@ export default class EncryptedFoldersPlugin extends Plugin {
 
       menu.addItem((item) => {
         item
-          .setTitle('Encrypt Folder')
+          .setTitle('Encrypt folder')
           .setIcon('lock')
           .onClick(() => {
             new PasswordModal(
               this.app,
-              'Encrypt Folder',
+              'Encrypt folder',
               async (password, lockImmediately) => {
                 const recoveryKey = await this.folderService.createEncryptedFolder(folder, password, lockImmediately);
                 new RecoveryKeyModal(this.app, recoveryKey).open();

@@ -203,7 +203,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     const migratedMetadata = this.ensureCurrentSchema(rawMetadata);
 
     await this.writeMetadata(folder.path, migratedMetadata);
-    await this.app.vault.delete(oldMetaFile);
+    await this.app.fileManager.trashFile(oldMetaFile);
 
     this.encryptedFolders.add(this.toFolderKey(folder.path));
     this.debug('legacy metadata migrated', { folder: folder.path });
@@ -372,7 +372,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       }
 
       await this.fileService.writeBinary(newPath, plaintext);
-      await this.app.vault.delete(file);
+      await this.app.fileManager.trashFile(file);
     } catch (error: unknown) {
       const err = error as { name?: string; message?: string };
       const errorMsg =
@@ -576,7 +576,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
       const readmeFile = this.fileService.getFile(this.getReadmePath(folder.path));
       if (readmeFile) {
-        await this.app.vault.delete(readmeFile);
+        await this.app.fileManager.trashFile(readmeFile);
       }
 
       this.unlockedFolders.set(this.toFolderKey(folder.path), masterKey);
@@ -676,12 +676,12 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
     const metaFile = this.fileService.getFile(this.getMetaPath(folder.path));
     if (metaFile) {
-      await this.app.vault.delete(metaFile);
+      await this.app.fileManager.trashFile(metaFile);
     }
 
     const readmeFile = this.fileService.getFile(this.getReadmePath(folder.path));
     if (readmeFile) {
-      await this.app.vault.delete(readmeFile);
+      await this.app.fileManager.trashFile(readmeFile);
     }
 
     this.unlockedFolders.delete(this.toFolderKey(folder.path));

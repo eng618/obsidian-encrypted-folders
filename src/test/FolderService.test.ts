@@ -13,9 +13,22 @@ describe('FolderService Integration', () => {
   beforeEach(() => {
     app = new App();
     encryptionService = new EncryptionService();
-    fileService = new FileService(app.vault);
+    fileService = new FileService(app.vault, (file) => app.fileManager.trashFile(file));
     folderService = new FolderService(encryptionService, fileService, app);
   });
+
+  const requireTFile = (path: string): TFile => {
+    const file = app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) {
+      throw new Error(`Expected TFile at path: ${path}`);
+    }
+    return file;
+  };
+
+  const getOptionalTFile = (path: string): TFile | null => {
+    const file = app.vault.getAbstractFileByPath(path);
+    return file instanceof TFile ? file : null;
+  };
 
   test('should encrypt and unlock a folder with contents', async () => {
     // Setup mock folder and file
@@ -39,7 +52,7 @@ describe('FolderService Integration', () => {
     expect(recoveryKey).toBeDefined();
 
     // Check file is encrypted and renamed (has MAGIC)
-    const lockedFile = app.vault.getAbstractFileByPath('secret/note.md.locked') as TFile;
+    const lockedFile = requireTFile('secret/note.md.locked');
     expect(lockedFile).toBeDefined();
     const encryptedData = await app.vault.readBinary(lockedFile);
     const view = new Uint8Array(encryptedData);
@@ -65,7 +78,7 @@ describe('FolderService Integration', () => {
     expect(readmeFileGone).toBeNull();
 
     // Check file is decrypted and renamed back
-    const decryptedFile = app.vault.getAbstractFileByPath('secret/note.md') as TFile;
+    const decryptedFile = getOptionalTFile('secret/note.md');
     expect(decryptedFile).not.toBeNull();
     if (decryptedFile) {
       const decryptedData = await app.vault.readBinary(decryptedFile);
@@ -218,7 +231,7 @@ describe('FolderService Integration', () => {
 
     // Unlock and verify
     await folderService.unlockFolder(parent, password);
-    const decryptedSubfile = app.vault.getAbstractFileByPath('parentfolder/subfolder/subfile.md') as TFile;
+    const decryptedSubfile = requireTFile('parentfolder/subfolder/subfile.md');
     expect(decryptedSubfile).toBeDefined();
   });
 
@@ -347,14 +360,14 @@ describe('FolderService Integration', () => {
     await folderService.createEncryptedFolder(folder, 'password123');
     await folderService.lockFolder(folder);
 
-    const metaLocked = app.vault.getAbstractFileByPath('journal/obsidian-folder-meta.json') as TFile;
+    const metaLocked = requireTFile('journal/obsidian-folder-meta.json');
     const lockedData = await app.vault.readBinary(metaLocked);
     const lockedState = JSON.parse(new TextDecoder().decode(lockedData));
     expect(lockedState.state).toBe('locked');
 
     await folderService.unlockFolder(folder, 'password123');
 
-    const metaUnlocked = app.vault.getAbstractFileByPath('journal/obsidian-folder-meta.json') as TFile;
+    const metaUnlocked = requireTFile('journal/obsidian-folder-meta.json');
     const unlockedData = await app.vault.readBinary(metaUnlocked);
     const unlockedState = JSON.parse(new TextDecoder().decode(unlockedData));
     expect(unlockedState.state).toBe('unlocked');
@@ -377,16 +390,16 @@ describe('FolderService Integration', () => {
 
     await folderService.createEncryptedFolder(folder, 'password123', true);
 
-    const lockedFile = app.vault.getAbstractFileByPath('sync-gap/note.md.locked') as TFile;
+    const lockedFile = requireTFile('sync-gap/note.md.locked');
     expect(lockedFile).toBeDefined();
 
-    await app.vault.delete(lockedFile);
+    await app.fileManager.trashFile(lockedFile);
 
     const success = await folderService.unlockFolder(folder, 'password123');
     expect(success).toBe(false);
     expect(folderService.isUnlocked(folder)).toBe(false);
 
-    const metaFile = app.vault.getAbstractFileByPath('sync-gap/obsidian-folder-meta.json') as TFile;
+    const metaFile = requireTFile('sync-gap/obsidian-folder-meta.json');
     const metaData = await app.vault.readBinary(metaFile);
     const metadata = JSON.parse(new TextDecoder().decode(metaData));
     expect(metadata.state).toBe('error');
@@ -401,7 +414,7 @@ describe('FolderService Integration', () => {
 
     await folderService.createEncryptedFolder(folder, 'password123', true);
 
-    const metaFile = app.vault.getAbstractFileByPath('empty-folder/obsidian-folder-meta.json') as TFile;
+    const metaFile = requireTFile('empty-folder/obsidian-folder-meta.json');
     const lockedMetaData = await app.vault.readBinary(metaFile);
     const lockedMetadata = JSON.parse(new TextDecoder().decode(lockedMetaData));
     expect(lockedMetadata.state).toBe('locked');

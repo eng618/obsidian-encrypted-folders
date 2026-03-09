@@ -123,11 +123,22 @@ export class Notice {
 
 export class App {
   vault: Vault;
+  fileManager: {
+    trashFile: ReturnType<typeof vi.fn>;
+  };
   workspace = {
     on: vi.fn(),
   };
   constructor() {
     this.vault = new Vault();
+    this.fileManager = {
+      trashFile: vi.fn(async (file: TFile | TFolder) => {
+        this.vault.files.delete(file.path);
+        if (file.parent) {
+          file.parent.children = file.parent.children.filter((c) => c !== file);
+        }
+      }),
+    };
   }
 }
 

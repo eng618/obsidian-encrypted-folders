@@ -19,9 +19,10 @@ export class PasswordModal extends Modal {
     contentEl.empty();
     contentEl.createEl('h2', { text: this.title });
 
-    const strengthEl = contentEl.createEl('div', { text: '', cls: 'password-strength' });
-    strengthEl.style.marginBottom = '10px';
-    strengthEl.style.fontSize = '0.8em';
+    const strengthEl = contentEl.createEl('div', {
+      text: '',
+      cls: 'password-strength password-strength-message',
+    });
 
     const passwordSetting = new Setting(contentEl).setName('Password');
     passwordSetting.addText((text) => {
@@ -68,14 +69,17 @@ export class PasswordModal extends Modal {
     }
     const len = this.password.length;
     if (len < 8) {
-      el.textContent = 'Weak: Too short (min 8 characters)';
-      el.style.color = 'var(--text-error)';
+      el.textContent = 'Weak: too short (min 8 characters)';
+      el.classList.remove('password-strength-medium', 'password-strength-strong');
+      el.classList.add('password-strength-weak');
     } else if (len < 12) {
-      el.textContent = 'Medium: Consider making it longer';
-      el.style.color = 'var(--text-warning)';
+      el.textContent = 'Medium: consider making it longer';
+      el.classList.remove('password-strength-weak', 'password-strength-strong');
+      el.classList.add('password-strength-medium');
     } else {
       el.textContent = 'Strong password';
-      el.style.color = 'var(--text-success)';
+      el.classList.remove('password-strength-weak', 'password-strength-medium');
+      el.classList.add('password-strength-strong');
     }
   }
 

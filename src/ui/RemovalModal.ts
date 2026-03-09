@@ -15,7 +15,7 @@ export class RemovalModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl('h2', { text: 'Remove Encryption' });
+    contentEl.createEl('h2', { text: 'Remove encryption' });
 
     contentEl.createEl('p', {
       text: 'This will permanently remove encryption from this folder and restore it to a normal folder. This action cannot be undone.',
@@ -41,7 +41,7 @@ export class RemovalModal extends Modal {
     new Setting(contentEl)
       .addButton((btn) =>
         btn
-          .setButtonText('Remove Encryption')
+          .setButtonText('Remove encryption')
           .setWarning()
           .onClick(async () => {
             if (this.isLocked && !this.password) {

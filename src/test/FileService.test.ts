@@ -4,10 +4,12 @@ import { TFile, TFolder, Vault } from './mocks/obsidian';
 describe('FileService', () => {
   let vault: Vault;
   let fileService: FileService;
+  let trashFile: (file: import('obsidian').TFile) => Promise<void>;
 
   beforeEach(() => {
     vault = new Vault();
-    fileService = new FileService(vault as unknown as import('obsidian').Vault);
+    trashFile = vi.fn<(file: import('obsidian').TFile) => Promise<void>>(async () => {});
+    fileService = new FileService(vault as unknown as import('obsidian').Vault, trashFile);
     vi.clearAllMocks();
   });
 
@@ -107,7 +109,7 @@ describe('FileService', () => {
 
       await fileService.deleteFile(file as unknown as import('obsidian').TFile);
 
-      expect(vault.trash).toHaveBeenCalledWith(file, true);
+      expect(trashFile).toHaveBeenCalledWith(file);
     });
   });
 
@@ -121,7 +123,7 @@ describe('FileService', () => {
       await fileService.shredFile(file as unknown as import('obsidian').TFile);
 
       expect(vault.modifyBinary).toHaveBeenCalled();
-      expect(vault.delete).toHaveBeenCalledWith(file);
+      expect(trashFile).toHaveBeenCalledWith(file);
     });
 
     it('should handle large files by chunking random values', async () => {
