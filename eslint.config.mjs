@@ -1,4 +1,9 @@
 import { recommended } from '@gv-tech/eslint-config';
+import obsidianmd from 'eslint-plugin-obsidianmd';
+
+const obsidianRecommendedRules = Object.fromEntries(
+  Object.entries(obsidianmd.configs.recommended).filter(([ruleName]) => ruleName.startsWith('obsidianmd/')),
+);
 
 /**
  * ESLint configuration for TypeScript projects. Uses @gv-tech/eslint-config for sensible defaults. For more information
@@ -17,4 +22,21 @@ export default [
     ],
   },
   ...recommended,
+  {
+    files: ['**/*.ts', '**/*.tsx'],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    plugins: {
+      obsidianmd,
+    },
+    rules: {
+      ...obsidianRecommendedRules,
+    },
+  },
 ];
