@@ -39,6 +39,40 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
+      .setName('Auto-lock behavior')
+      .setDesc(
+        'Background locking applies to every unlocked folder. Inactivity locking is tracked per unlocked folder and is refreshed when you open, edit, or otherwise work inside that folder.',
+      );
+
+    new Setting(containerEl)
+      .setName('Lock on background')
+      .setDesc(
+        'Lock all unlocked folders when Obsidian moves to the background. Enabled by default for sync safety, especially on mobile.',
+      )
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.autoLockOnBackground).onChange(async (value) => {
+          this.plugin.settings.autoLockOnBackground = value;
+          await this.plugin.saveSettings();
+        }),
+      );
+
+    new Setting(containerEl)
+      .setName('Lock after inactivity')
+      .setDesc(
+        'Lock each unlocked folder after this many minutes without activity in that folder. The default is 5 minutes. Set to 0 to disable this safeguard.',
+      )
+      .addText((text) => {
+        text.inputEl.type = 'number';
+        text.inputEl.min = '0';
+        text.inputEl.step = '1';
+        text.setValue(String(this.plugin.settings.autoLockIdleMinutes)).onChange(async (value) => {
+          const parsed = Number.parseInt(value, 10);
+          this.plugin.settings.autoLockIdleMinutes = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(containerEl)
       .setName('Sync diagnostics')
       .setDesc('Enable debug logs for cross-device sync detection, migration, and lock state transitions.')
       .addToggle((toggle) =>

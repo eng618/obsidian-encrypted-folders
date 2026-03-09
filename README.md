@@ -22,6 +22,7 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 - **Recovery Keys**: Generate a 32-character recovery key during setup to ensure you never lose access to your data.
 - **Secure File Shredding**: Automatically overwrites plaintext files with secure random data before re-encrypting to prevent forensic disk recovery.
 - **Auto-Lock Security**: All folders are automatically re-encrypted and locked when the plugin is disabled or Obsidian is closed.
+- **Configurable Safeguards**: Lock unlocked folders automatically when Obsidian goes into the background or after a configurable period of per-folder inactivity.
 - **Exit Strategy**: Permanently remove encryption from a folder if you no longer need it, restoring files to normal plaintext Obsidian management.
 - **Integrity First**: Prevents nested encryption within already encrypted folders to ensure a simple, reliable vault structure.
 - **Sync-Safe State Tracking**: Lock and unlock operations are journaled in metadata to improve cross-device consistency during delayed or partial sync.
@@ -56,6 +57,14 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 3. The plugin will securely overwrite the content on disk with ciphertext, rename files to `[name].locked`, and create a `README_ENCRYPTED.md` with instructions.
 4. The key is purged from memory for maximum security.
 
+### Auto-lock safeguards
+
+- By default, unlocked folders are locked automatically when Obsidian moves to the background.
+- By default, each unlocked folder is also locked after 5 minutes without activity in that folder.
+- Opening, editing, or otherwise working in files inside an unlocked folder refreshes that folder's inactivity timer.
+- You can change both safeguards in **Settings → Encrypted Folders**.
+- Set the inactivity timeout to `0` if you want to disable that safeguard.
+
 ### Removing Encryption Permanently
 
 1. Right-click an encrypted folder.
@@ -68,6 +77,7 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 
 - The plugin continuously rescans and reconciles encrypted-folder metadata after file create/modify/rename/delete events.
 - If a sync operation lands while a folder is transitioning, metadata state (`locking` / `unlocking`) is reconciled on the receiving device.
+- Background locking protects every unlocked folder at once, and per-folder inactivity locking reduces the chance that one forgotten unlocked folder stays open long enough to trigger cross-device sync conflicts.
 - Legacy folders that only have `.obsidian-folder-meta` must be migrated with **Migrate Folder Encryption Metadata** before unlocking.
 
 ## 🛠️ Development

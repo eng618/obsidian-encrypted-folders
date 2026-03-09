@@ -1,4 +1,4 @@
-import { Menu, Notice, Plugin, TFolder } from 'obsidian';
+import { Menu, Notice, Plugin, TFile, TFolder } from 'obsidian';
 import { EncryptionService } from './src/services/EncryptionService';
 import { FileService } from './src/services/FileService';
 import { FolderService } from './src/services/FolderService';
@@ -8,10 +8,14 @@ import { RemovalModal } from './src/ui/RemovalModal';
 import { EncryptedFoldersSettingTab } from './src/ui/SettingsTab';
 
 interface EncryptedFoldersSettings {
+  autoLockOnBackground: boolean;
+  autoLockIdleMinutes: number;
   debugLogging: boolean;
 }
 
 const DEFAULT_SETTINGS: EncryptedFoldersSettings = {
+  autoLockOnBackground: true,
+  autoLockIdleMinutes: 5,
   debugLogging: false,
 };
 
@@ -21,6 +25,8 @@ export default class EncryptedFoldersPlugin extends Plugin {
   fileService: FileService;
   folderService: FolderService;
 
+  private readonly autoLockCheckIntervalMs = 30 * 1000;
+
   async onload() {
     await this.loadSettings();
 
@@ -29,6 +35,10 @@ export default class EncryptedFoldersPlugin extends Plugin {
     this.fileService = new FileService(this.app.vault, (file) => this.app.fileManager.trashFile(file));
     this.folderService = new FolderService(this.encryptionService, this.fileService, this.app);
     this.folderService.setDebugLogging(this.settings.debugLogging);
+    this.folderService.setAutoLockSettings({
+      idleMinutes: this.settings.autoLockIdleMinutes,
+      lockOnBackground: this.settings.autoLockOnBackground,
+    });
     await this.folderService.syncFolders();
 
     this.registerEvent(
@@ -44,12 +54,16 @@ export default class EncryptedFoldersPlugin extends Plugin {
         if (file instanceof TFolder) {
           this.folderService.updatePath(oldPath, file.path);
         }
+        if (file instanceof TFolder || file instanceof TFile) {
+          this.folderService.recordActivityForItem(file);
+        }
         this.folderService.requestSyncFolders('rename');
       }),
     );
 
     this.registerEvent(
       this.app.vault.on('delete', (file) => {
+        this.folderService.recordActivityForItem(file.parent);
         if (file instanceof TFolder) {
           this.folderService.removePath(file.path);
         }
@@ -59,6 +73,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
 
     this.registerEvent(
       this.app.vault.on('create', (file) => {
+        if (file instanceof TFolder || file instanceof TFile) {
+          this.folderService.recordActivityForItem(file);
+        }
         if (file instanceof TFolder) {
           void this.folderService.reconcileFolderState(file);
         }
@@ -68,6 +85,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
 
     this.registerEvent(
       this.app.vault.on('modify', (file) => {
+        if (file instanceof TFolder || file instanceof TFile) {
+          this.folderService.recordActivityForItem(file);
+        }
         if (file.parent instanceof TFolder) {
           void this.folderService.reconcileFolderState(file.parent);
         }
@@ -75,7 +95,62 @@ export default class EncryptedFoldersPlugin extends Plugin {
       }),
     );
 
+    this.registerEvent(
+      this.app.workspace.on('file-open', (file) => {
+        this.folderService.recordActivityForItem(file);
+      }),
+    );
+
+    this.registerDomEvent(document, 'visibilitychange', () => {
+      void this.handleVisibilityChange();
+    });
+
+    this.registerDomEvent(window, 'focus', () => {
+      this.recordActiveFolderActivity();
+    });
+
+    this.registerDomEvent(document, 'keydown', () => {
+      this.recordActiveFolderActivity();
+    });
+
+    this.registerDomEvent(document, 'pointerdown', () => {
+      this.recordActiveFolderActivity();
+    });
+
+    this.registerDomEvent(document, 'touchstart', () => {
+      this.recordActiveFolderActivity();
+    });
+
+    this.registerInterval(
+      window.setInterval(() => {
+        void this.handleIdleAutoLock();
+      }, this.autoLockCheckIntervalMs),
+    );
+
     this.addSettingTab(new EncryptedFoldersSettingTab(this.app, this));
+  }
+
+  private async handleVisibilityChange(): Promise<void> {
+    if (!document.hidden) {
+      this.recordActiveFolderActivity();
+      return;
+    }
+
+    const locked = await this.folderService.runBackgroundAutoLock();
+    if (locked) {
+      new Notice('Unlocked folders were locked because Obsidian entered the background.');
+    }
+  }
+
+  private async handleIdleAutoLock(): Promise<void> {
+    const locked = await this.folderService.runIdleAutoLock();
+    if (locked) {
+      new Notice('Inactive unlocked folders were locked automatically.');
+    }
+  }
+
+  private recordActiveFolderActivity(): void {
+    this.folderService.recordActivityForItem(this.app.workspace.getActiveFile());
   }
 
   handleFolderMenu(menu: Menu, folder: TFolder) {
@@ -217,5 +292,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
   async saveSettings() {
     await this.saveData(this.settings);
     this.folderService.setDebugLogging(this.settings.debugLogging);
+    this.folderService.setAutoLockSettings({
+      idleMinutes: this.settings.autoLockIdleMinutes,
+      lockOnBackground: this.settings.autoLockOnBackground,
+    });
   }
 }

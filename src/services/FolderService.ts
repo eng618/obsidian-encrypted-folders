@@ -3,10 +3,21 @@ import { FolderLifecycleState, FolderMetadata } from '../models/FolderState';
 import { EncryptionService } from './EncryptionService';
 import { FileService } from './FileService';
 
+export interface AutoLockSettings {
+  idleMinutes: number;
+  lockOnBackground: boolean;
+}
+
 export class FolderService {
   private unlockedFolders: Map<string, CryptoKey> = new Map();
   private encryptedFolders: Set<string> = new Set();
   private syncDebounceTimer: number | null = null;
+  private unlockedFolderActivityAt: Map<string, number> = new Map();
+  private autoLockInProgress = false;
+  private autoLockSettings: AutoLockSettings = {
+    idleMinutes: 5,
+    lockOnBackground: true,
+  };
   private debugLogging = false;
 
   private readonly META_FILE_NAME = 'obsidian-folder-meta.json';
@@ -35,6 +46,35 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
   setDebugLogging(enabled: boolean): void {
     this.debugLogging = enabled;
+  }
+
+  setAutoLockSettings(settings: AutoLockSettings): void {
+    this.autoLockSettings = {
+      idleMinutes: Number.isFinite(settings.idleMinutes) ? Math.max(0, Math.floor(settings.idleMinutes)) : 0,
+      lockOnBackground: Boolean(settings.lockOnBackground),
+    };
+  }
+
+  recordActivityForPath(path: string, timestamp = Date.now()): void {
+    const folderKey = this.toFolderKey(path);
+    if (!this.unlockedFolders.has(folderKey)) {
+      return;
+    }
+
+    this.unlockedFolderActivityAt.set(folderKey, timestamp);
+  }
+
+  recordActivityForItem(item: TFile | TFolder | null, timestamp = Date.now()): void {
+    if (!item) {
+      return;
+    }
+
+    const folderKey = this.getTrackedFolderKey(item);
+    if (!folderKey) {
+      return;
+    }
+
+    this.unlockedFolderActivityAt.set(folderKey, timestamp);
   }
 
   getUnlockedFolderPaths(): string[] {
@@ -85,6 +125,102 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
   private getReadmePath(folderPath: string): string {
     return normalizePath(`${folderPath}/${this.README_FILE_NAME}`);
+  }
+
+  private getIdleTimeoutMs(): number | null {
+    if (this.autoLockSettings.idleMinutes <= 0) {
+      return null;
+    }
+
+    return this.autoLockSettings.idleMinutes * 60 * 1000;
+  }
+
+  private getTrackedFolderKey(item: TFile | TFolder): string | null {
+    if (item instanceof TFolder) {
+      const folderKey = this.toFolderKey(item.path);
+      if (this.unlockedFolders.has(folderKey)) {
+        return folderKey;
+      }
+    }
+
+    const encryptedParent = this.getEncryptedParent(item);
+    if (!encryptedParent) {
+      return null;
+    }
+
+    const parentKey = this.toFolderKey(encryptedParent.path);
+    return this.unlockedFolders.has(parentKey) ? parentKey : null;
+  }
+
+  private getExpiredUnlockedFolderPaths(timestamp: number): string[] {
+    const idleTimeoutMs = this.getIdleTimeoutMs();
+    if (idleTimeoutMs === null) {
+      return [];
+    }
+
+    return Array.from(this.unlockedFolders.keys()).filter((folderKey) => {
+      const lastActivityAt = this.unlockedFolderActivityAt.get(folderKey);
+      if (lastActivityAt === undefined) {
+        return false;
+      }
+
+      return timestamp - lastActivityAt >= idleTimeoutMs;
+    });
+  }
+
+  private async lockTrackedFolders(folderPaths?: string[]): Promise<boolean> {
+    let lockedAny = false;
+    const paths = folderPaths ?? Array.from(this.unlockedFolders.keys());
+
+    for (const path of paths) {
+      const folder = this.app.vault.getAbstractFileByPath(path);
+      if (folder instanceof TFolder) {
+        await this.lockFolder(folder);
+        lockedAny = true;
+        continue;
+      }
+
+      this.unlockedFolders.delete(path);
+      this.unlockedFolderActivityAt.delete(path);
+    }
+
+    return lockedAny;
+  }
+
+  private async runAutoLock(reason: 'background' | 'idle', folderPaths?: string[]): Promise<boolean> {
+    const paths = folderPaths ?? Array.from(this.unlockedFolders.keys());
+    if (this.autoLockInProgress || paths.length === 0) {
+      return false;
+    }
+
+    this.autoLockInProgress = true;
+
+    try {
+      const locked = await this.lockTrackedFolders(paths);
+      if (locked) {
+        this.debug('folders auto-locked', { reason });
+      }
+      return locked;
+    } finally {
+      this.autoLockInProgress = false;
+    }
+  }
+
+  async runBackgroundAutoLock(): Promise<boolean> {
+    if (!this.autoLockSettings.lockOnBackground) {
+      return false;
+    }
+
+    return this.runAutoLock('background');
+  }
+
+  async runIdleAutoLock(timestamp = Date.now()): Promise<boolean> {
+    const expiredPaths = this.getExpiredUnlockedFolderPaths(timestamp);
+    if (expiredPaths.length === 0) {
+      return false;
+    }
+
+    return this.runAutoLock('idle', expiredPaths);
   }
 
   private hasLegacyMetadata(folder: TFolder): boolean {
@@ -271,6 +407,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       }
     } else {
       this.unlockedFolders.set(this.toFolderKey(folder.path), masterKey);
+      this.recordActivityForPath(folder.path);
       metadata = await this.transitionMetadataState(folder, metadata, 'unlocked');
     }
 
@@ -580,6 +717,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       }
 
       this.unlockedFolders.set(this.toFolderKey(folder.path), masterKey);
+      this.recordActivityForPath(folder.path);
       await this.transitionMetadataState(folder, metadata, 'unlocked');
       this.debug('folder unlocked', { folder: folder.path, isRecovery });
       return true;
@@ -615,6 +753,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
         new TextEncoder().encode(this.README_CONTENT).buffer,
       );
       this.unlockedFolders.delete(folderKey);
+      this.unlockedFolderActivityAt.delete(folderKey);
       await this.transitionMetadataState(folder, metadata, 'locked');
       this.debug('folder locked', { folder: folder.path });
     } catch (error) {
@@ -624,12 +763,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   }
 
   async lockAllFolders(): Promise<void> {
-    for (const path of Array.from(this.unlockedFolders.keys())) {
-      const folder = this.app.vault.getAbstractFileByPath(path);
-      if (folder instanceof TFolder) {
-        await this.lockFolder(folder);
-      }
-    }
+    await this.lockTrackedFolders();
     this.unlockedFolders.clear();
   }
 
@@ -647,6 +781,12 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       this.unlockedFolders.delete(oldKey);
     }
 
+    const activityAt = this.unlockedFolderActivityAt.get(oldKey);
+    if (activityAt !== undefined) {
+      this.unlockedFolderActivityAt.set(newKey, activityAt);
+      this.unlockedFolderActivityAt.delete(oldKey);
+    }
+
     if (this.encryptedFolders.has(oldKey)) {
       this.encryptedFolders.delete(oldKey);
       this.encryptedFolders.add(newKey);
@@ -656,6 +796,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   removePath(path: string): void {
     const key = this.toFolderKey(path);
     this.unlockedFolders.delete(key);
+    this.unlockedFolderActivityAt.delete(key);
     this.encryptedFolders.delete(key);
   }
 
@@ -685,6 +826,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
 
     this.unlockedFolders.delete(this.toFolderKey(folder.path));
+    this.unlockedFolderActivityAt.delete(this.toFolderKey(folder.path));
     this.encryptedFolders.delete(this.toFolderKey(folder.path));
 
     return true;

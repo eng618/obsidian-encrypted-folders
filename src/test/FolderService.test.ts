@@ -126,6 +126,62 @@ describe('FolderService Integration', () => {
     expect(folderService.isUnlocked(folder2)).toBe(false);
   });
 
+  it('should auto-lock unlocked folders when the app enters the background', async () => {
+    const folder = new TFolder();
+    folder.path = 'background-lock';
+    folder.children = [];
+    (app.vault as any).files.set(folder.path, folder);
+
+    folderService.setAutoLockSettings({ idleMinutes: 5, lockOnBackground: true });
+
+    await folderService.createEncryptedFolder(folder, 'password123');
+
+    const locked = await folderService.runBackgroundAutoLock();
+    expect(locked).toBe(true);
+    expect(folderService.isUnlocked(folder)).toBe(false);
+  });
+
+  it('should not auto-lock on background when the safeguard is disabled', async () => {
+    const folder = new TFolder();
+    folder.path = 'background-disabled';
+    folder.children = [];
+    (app.vault as any).files.set(folder.path, folder);
+
+    folderService.setAutoLockSettings({ idleMinutes: 5, lockOnBackground: false });
+
+    await folderService.createEncryptedFolder(folder, 'password123');
+
+    const locked = await folderService.runBackgroundAutoLock();
+    expect(locked).toBe(false);
+    expect(folderService.isUnlocked(folder)).toBe(true);
+  });
+
+  it('should auto-lock only folders whose per-folder inactivity timeout has elapsed', async () => {
+    const folderA = new TFolder();
+    folderA.path = 'idle-lock-a';
+    folderA.children = [];
+    (app.vault as any).files.set(folderA.path, folderA);
+
+    const folderB = new TFolder();
+    folderB.path = 'idle-lock-b';
+    folderB.children = [];
+    (app.vault as any).files.set(folderB.path, folderB);
+
+    folderService.setAutoLockSettings({ idleMinutes: 5, lockOnBackground: true });
+
+    await folderService.createEncryptedFolder(folderA, 'password123');
+    await folderService.createEncryptedFolder(folderB, 'password456');
+
+    folderService.recordActivityForItem(folderA, 1_000);
+    folderService.recordActivityForItem(folderB, 1_000);
+    folderService.recordActivityForItem(folderB, 250_000);
+
+    const locked = await folderService.runIdleAutoLock(301_000);
+    expect(locked).toBe(true);
+    expect(folderService.isUnlocked(folderA)).toBe(false);
+    expect(folderService.isUnlocked(folderB)).toBe(true);
+  });
+
   it('should permanently remove encryption', async () => {
     const folder = new TFolder();
     folder.path = 'to-be-decrypted';
