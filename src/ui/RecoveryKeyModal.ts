@@ -24,23 +24,25 @@ export class RecoveryKeyModal extends Modal {
     keyContainer.setText(this.recoveryKey);
 
     new Setting(contentEl)
-      .addButton((btn) =>
+      .addButton((btn) => {
         btn.setButtonText('Copy to clipboard').onClick(() => {
           void this.copyRecoveryKey(btn);
-        }),
-      )
-      .addButton((btn) =>
+        });
+      })
+      .addButton((btn) => {
         btn
           .setButtonText('Done')
           .setCta()
-          .onClick(() => this.close()),
-      );
+          .onClick(() => this.close());
+      });
   }
 
   private async copyRecoveryKey(button: ButtonComponent): Promise<void> {
     await navigator.clipboard.writeText(this.recoveryKey);
     button.setButtonText('Copied!');
-    window.setTimeout(() => button.setButtonText('Copy to clipboard'), 2000);
+    window.setTimeout(() => {
+      button.setButtonText('Copy to clipboard');
+    }, 2000);
   }
 
   onClose() {
