@@ -26,10 +26,8 @@ export class EncryptionService implements IEncryptionService {
   private readonly KEY_LENGTH = 256;
   private readonly DIGEST = 'SHA-256';
 
-  private toArrayBuffer(view: Uint8Array): ArrayBuffer {
-    const copy = new Uint8Array(view.byteLength);
-    copy.set(view);
-    return copy.buffer;
+  private toBufferView(view: Uint8Array): Uint8Array<ArrayBuffer> {
+    return new Uint8Array(view);
   }
 
   generateSalt(length = 16): Uint8Array {
@@ -51,7 +49,7 @@ export class EncryptionService implements IEncryptionService {
       {
         name: 'PBKDF2',
 
-        salt: this.toArrayBuffer(salt),
+        salt: this.toBufferView(salt),
         iterations: this.ITERATIONS,
         hash: this.DIGEST,
       },
@@ -67,7 +65,7 @@ export class EncryptionService implements IEncryptionService {
     const ciphertext = await window.crypto.subtle.encrypt(
       {
         name: 'AES-GCM',
-        iv: this.toArrayBuffer(iv),
+        iv: this.toBufferView(iv),
         tagLength: 128,
       },
       key,
@@ -102,7 +100,7 @@ export class EncryptionService implements IEncryptionService {
 
   async decrypt(ciphertext: ArrayBuffer, password: string, iv: Uint8Array, salt: Uint8Array): Promise<ArrayBuffer> {
     const derivedKey = await this.deriveKey(password, salt);
-    return this.decryptWithKey(ciphertext, derivedKey, this.toArrayBuffer(iv));
+    return this.decryptWithKey(ciphertext, derivedKey, this.toBufferView(iv));
   }
 
   async generateMasterKey(): Promise<CryptoKey> {

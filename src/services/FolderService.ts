@@ -455,9 +455,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     const { iv, ciphertext } = this.splitMagicBuffer(data);
     try {
       const plaintext = await this.encryptionService.decryptWithKey(
-        this.toArrayBuffer(ciphertext),
+        this.toBufferView(ciphertext),
         key,
-        this.toArrayBuffer(iv),
+        this.toBufferView(iv),
       );
 
       let newPath = file.path;
@@ -534,10 +534,8 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     return tmp.buffer;
   }
 
-  private toArrayBuffer(view: Uint8Array): ArrayBuffer {
-    const copy = new Uint8Array(view.byteLength);
-    copy.set(view);
-    return copy.buffer;
+  private toBufferView(view: Uint8Array): Uint8Array<ArrayBuffer> {
+    return new Uint8Array(view);
   }
 
   private async scanAdapterTree(basePath: string, discovered: Set<string>): Promise<void> {
