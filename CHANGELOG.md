@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.0](https://github.com/eng618/obsidian-encrypted-folders/compare/1.0.0...1.1.0) (2026-03-10)
+
+
+### Features
+
+* Add folder context menu integration and enhance README content for encrypted folders ([1eae775](https://github.com/eng618/obsidian-encrypted-folders/commit/1eae7750d1e516a423646c3970bb64f76f1effb4))
+* Add folder metadata migration and locking functionality ([e975e22](https://github.com/eng618/obsidian-encrypted-folders/commit/e975e2240b3f079c50b4e97ae533c47b3940d08b))
+* Implement configurable auto-lock safeguards for unlocked folders ([fb4da49](https://github.com/eng618/obsidian-encrypted-folders/commit/fb4da498e70ff8debdaa1151be821162f824aed7))
+
+
+### Bug Fixes
+
+* Replace toArrayBuffer method with toBufferView for improved consistency ([bf9a326](https://github.com/eng618/obsidian-encrypted-folders/commit/bf9a3266486811b973078c50040b96c06a4fb6db))
+
 ## [1.0.0](https://github.com/eng618/obsidian-encrypted-folders/compare/0.0.1...1.0.0) (2026-03-07)
 
 
