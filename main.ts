@@ -50,6 +50,19 @@ export default class EncryptedFoldersPlugin extends Plugin {
     );
 
     this.registerEvent(
+      this.app.workspace.on('files-menu', (menu, files) => {
+        if (files.length !== 1) {
+          return;
+        }
+
+        const [file] = files;
+        if (file instanceof TFolder) {
+          this.handleFolderMenu(menu, file);
+        }
+      }),
+    );
+
+    this.registerEvent(
       this.app.vault.on('rename', (file, oldPath) => {
         if (file instanceof TFolder) {
           this.folderService.updatePath(oldPath, file.path);

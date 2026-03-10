@@ -24,18 +24,6 @@ export class FolderService {
   private readonly LOCKED_EXTENSION = '.locked';
   private readonly META_SCHEMA_VERSION = 2;
   private readonly README_FILE_NAME = 'README_ENCRYPTED.md';
-  private readonly README_CONTENT = `
-# 🔒 Folder Encrypted
-
-This folder is currently encrypted and locked by the **Obsidian Encrypted Folders** plugin.
-
-### 🔑 How to Unlock
-1. **Right-click** on this folder in the file explorer.
-2. Select **"Unlock Folder"**.
-3. Enter your password to restore your files.
-
-*Note: The ".locked" files are your encrypted data. Do not delete or modify them while the folder is locked.*
-`.trim();
 
   constructor(
     private encryptionService: EncryptionService,
@@ -120,6 +108,34 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
   private getReadmePath(folderPath: string): string {
     return normalizePath(`${folderPath}/${this.README_FILE_NAME}`);
+  }
+
+  private getFolderDisplayName(folder: TFolder): string {
+    if (folder.name && folder.name.trim().length > 0) {
+      return folder.name;
+    }
+
+    const segments = normalizePath(folder.path)
+      .split('/')
+      .filter((segment) => segment.length > 0);
+    return segments.length > 0 ? segments[segments.length - 1] : folder.path;
+  }
+
+  private buildReadmeContent(folder: TFolder): string {
+    const folderName = this.getFolderDisplayName(folder);
+    return `
+# 🔒 ${folderName} is encrypted
+
+This folder is currently encrypted and locked by the **Obsidian Encrypted Folders** plugin.
+
+### 🔑 How to unlock
+
+1. Desktop: Right-click this folder in the file explorer, then select **Unlock folder**.
+2. Mobile: Long-press this folder in the file explorer, then select **Unlock folder**.
+3. Enter your password to restore your files.
+
+*Note: The ".locked" files are your encrypted data. Do not delete or modify them while the folder is locked.*
+`.trim();
   }
 
   private getIdleTimeoutMs(): number | null {
@@ -300,7 +316,10 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     if (metadata.state === 'locking') {
       const readmePath = this.getReadmePath(folder.path);
       if (!this.fileService.exists(readmePath)) {
-        await this.fileService.writeBinary(readmePath, new TextEncoder().encode(this.README_CONTENT).buffer);
+        await this.fileService.writeBinary(
+          readmePath,
+          new TextEncoder().encode(this.buildReadmeContent(folder)).buffer,
+        );
       }
       await this.transitionMetadataState(folder, metadata, 'locked');
       return;
@@ -365,7 +384,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
         };
         await this.fileService.writeBinary(
           this.getReadmePath(folder.path),
-          new TextEncoder().encode(this.README_CONTENT).buffer,
+          new TextEncoder().encode(this.buildReadmeContent(folder)).buffer,
         );
         metadata = await this.transitionMetadataState(folder, metadata, 'locked');
       } catch (error) {
@@ -709,7 +728,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       };
       await this.fileService.writeBinary(
         this.getReadmePath(folder.path),
-        new TextEncoder().encode(this.README_CONTENT).buffer,
+        new TextEncoder().encode(this.buildReadmeContent(folder)).buffer,
       );
       this.unlockedFolders.delete(folderKey);
       this.unlockedFolderActivityAt.delete(folderKey);

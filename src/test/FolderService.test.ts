@@ -62,8 +62,11 @@ describe('FolderService Integration', () => {
     expect(app.vault.getAbstractFileByPath('secret/note.md')).toBeNull();
 
     // Check README exists immediately after lock
-    const readmeFile = app.vault.getAbstractFileByPath('secret/README_ENCRYPTED.md');
+    const readmeFile = requireTFile('secret/README_ENCRYPTED.md');
     expect(readmeFile).toBeDefined();
+    const readmeContent = new TextDecoder().decode(await app.vault.readBinary(readmeFile));
+    expect(readmeContent).toContain('# 🔒 secret is encrypted');
+    expect(readmeContent).toContain('Mobile: Long-press this folder in the file explorer');
 
     // Folder should not be unlocked since we locked immediately
     expect(folderService.isUnlocked(folder)).toBe(false);
