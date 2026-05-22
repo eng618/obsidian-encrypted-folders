@@ -38,3 +38,7 @@ TestVault/*/obsidian-folder-meta.json
 
 # Coverage
 coverage/
+
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
