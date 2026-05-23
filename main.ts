@@ -175,7 +175,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
     new Notice('Folder locked.');
   }
 
-  handleFolderMenu(menu: Menu, folder: TFolder) {
+  private handleFolderMenu(menu: Menu, folder: TFolder) {
     const isEncrypted = this.folderService.isEncryptedFolder(folder);
 
     if (isEncrypted) {
