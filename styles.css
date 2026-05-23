@@ -26,3 +26,17 @@
   text-align: center;
   user-select: all;
 }
+
+.nav-folder-title.ef-folder-locked::after {
+  content: ' 🔒';
+  font-size: 0.8em;
+  opacity: 0.6;
+  margin-left: 4px;
+}
+
+.nav-folder-title.ef-folder-unlocked::after {
+  content: ' 🔓';
+  font-size: 0.8em;
+  opacity: 0.6;
+  margin-left: 4px;
+}

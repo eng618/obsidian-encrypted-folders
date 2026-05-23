@@ -99,7 +99,16 @@ export default class EncryptedFoldersPlugin extends Plugin {
     );
 
     this.registerEvent(
+      this.app.workspace.on('layout-change', () => {
+        this.updateExplorerIndicators();
+      }),
+    );
+
+    this.registerEvent(
       this.app.vault.on('modify', (file) => {
+        if (file instanceof TFolder || file.parent instanceof TFolder) {
+          this.updateExplorerIndicators();
+        }
         if (file instanceof TFolder || file instanceof TFile) {
           this.folderService.recordActivityForItem(file);
         }
@@ -288,6 +297,39 @@ export default class EncryptedFoldersPlugin extends Plugin {
           });
       });
     }
+  }
+
+  private updateExplorerIndicators(): void {
+    const explorer = this.app.workspace.getLeavesOfType('file-explorer').first();
+    if (!explorer) {
+      return;
+    }
+
+    const container = explorer.view.containerEl.querySelector('.nav-folder-container');
+    if (!container) {
+      return;
+    }
+
+    const folderElements = container.querySelectorAll('.nav-folder-title');
+    folderElements.forEach((el) => {
+      const folderPath = el.querySelector('.nav-folder-title-title')?.textContent;
+      if (!folderPath) {
+        return;
+      }
+
+      const folder = this.app.vault.getAbstractFileByPath(folderPath);
+      if (!(folder instanceof TFolder)) {
+        return;
+      }
+
+      const isEncrypted = this.folderService.isEncryptedFolder(folder);
+      const isUnlocked = this.folderService.isUnlocked(folder);
+
+      el.classList.remove('ef-folder-locked', 'ef-folder-unlocked');
+      if (isEncrypted) {
+        el.classList.add(isUnlocked ? 'ef-folder-unlocked' : 'ef-folder-locked');
+      }
+    });
   }
 
   onunload() {

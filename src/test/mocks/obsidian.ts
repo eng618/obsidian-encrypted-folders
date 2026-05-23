@@ -195,10 +195,11 @@ export class Notice {
 export class App {
   vault: Vault;
   fileManager: {
-    trashFile: ReturnType<typeof vi.fn>;
+    trashFile: (file: TFile | TFolder) => Promise<void>;
   };
-  workspace = {
-    on: vi.fn(),
+  workspace: {
+    on: (...args: any[]) => any;
+    getLeavesOfType: (...args: any[]) => any;
   };
   constructor() {
     this.vault = new Vault();
@@ -209,6 +210,10 @@ export class App {
           file.parent.children = file.parent.children.filter((c) => c !== file);
         }
       }),
+    };
+    this.workspace = {
+      on: vi.fn(),
+      getLeavesOfType: vi.fn().mockReturnValue([]),
     };
   }
 }
