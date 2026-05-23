@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.0](https://github.com/eng618/obsidian-encrypted-folders/compare/1.2.0...1.3.0) (2026-05-23)
+
+
+### Features
+
+* Add visual lock/unlock indicators to folders in the file explorer and include supporting tests ([a68967b](https://github.com/eng618/obsidian-encrypted-folders/commit/a68967ba10a2f3ad5976cb3c1359782b51306f26))
+
+
+### Bug Fixes
+
+* Handle non-Error objects in removal failure notice to prevent runtime exceptions ([9b0bc19](https://github.com/eng618/obsidian-encrypted-folders/commit/9b0bc194f7a6e9ef8ffd4cd4867e3b8af1f150d4))
+
 ## [1.2.0](https://github.com/eng618/obsidian-encrypted-folders/compare/1.1.0...1.2.0) (2026-05-23)
 
 
