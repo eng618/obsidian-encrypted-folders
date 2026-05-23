@@ -252,7 +252,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
                   new Notice('Incorrect password.');
                 }
               } catch (e) {
-                new Notice(`Removal failed: ${e.message}`);
+                new Notice(`Removal failed: ${e instanceof Error ? e.message : 'An unexpected error occurred'}`);
               }
             }).open();
           });
