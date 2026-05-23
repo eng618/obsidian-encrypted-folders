@@ -3,10 +3,12 @@ import { addPasswordToggle } from './UIUtils';
 
 export class RemovalModal extends Modal {
   private password = '';
+  private confirmationText = '';
 
   constructor(
     app: App,
     private isLocked: boolean,
+    private folderName: string,
     private onConfirm: (password?: string) => Promise<void>,
   ) {
     super(app);
@@ -38,6 +40,18 @@ export class RemovalModal extends Modal {
       });
     }
 
+    contentEl.createEl('p', {
+      text: `To confirm, please type the folder name: ${this.folderName}`,
+      cls: 'mod-muted',
+    });
+
+    const confirmSetting = new Setting(contentEl).setName('Confirmation');
+    confirmSetting.addText((text) => {
+      text.setPlaceholder(this.folderName).onChange((value) => {
+        this.confirmationText = value;
+      });
+    });
+
     new Setting(contentEl)
       .addButton((btn) =>
         btn
@@ -63,6 +77,11 @@ export class RemovalModal extends Modal {
   }
 
   private async confirmRemoval(): Promise<void> {
+    if (this.confirmationText !== this.folderName) {
+      new Notice('Confirmation text does not match folder name.');
+      return;
+    }
+
     if (this.isLocked && !this.password) {
       new Notice('Password is required.');
       return;

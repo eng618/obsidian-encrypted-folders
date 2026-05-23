@@ -252,7 +252,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
           .setIcon('trash-2')
           .onClick(() => {
             const isLocked = !this.folderService.isUnlocked(folder);
-            new RemovalModal(this.app, isLocked, async (password) => {
+            new RemovalModal(this.app, isLocked, folder.path, async (password) => {
               try {
                 const success = await this.folderService.removeEncryption(folder, password);
                 if (success) {
