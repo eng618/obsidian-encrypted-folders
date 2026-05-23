@@ -1,0 +1,52 @@
+name: update-release-pr
+
+# Fires when release-please opens or updates its release PR.
+# Commits the versions.json update into the PR branch so it
+# goes through CI and lands on main together with the release.
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  update-versions:
+    # Only run on release-please branches
+    if: startsWith(github.head_ref, 'release-please--')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          # Use the PAT so the push can trigger other workflows if needed
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Get version from manifest.json
+        id: version
+        run: echo "version=$(jq -r .version manifest.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Update versions.json
+        env:
+          npm_package_version: ${{ steps.version.outputs.version }}
+        run: bun scripts/version-bump.mjs
+
+      - name: Commit versions.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add versions.json
+          # No-op if versions.json didn't actually change
+          git diff --cached --quiet || git commit -m "chore: update versions.json for ${{ steps.version.outputs.version }}"
+          git push
