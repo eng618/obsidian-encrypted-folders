@@ -11,12 +11,14 @@ interface EncryptedFoldersSettings {
   autoLockOnBackground: boolean;
   autoLockIdleMinutes: number;
   debugLogging: boolean;
+  maxPasswordAttempts: number;
 }
 
 const DEFAULT_SETTINGS: EncryptedFoldersSettings = {
   autoLockOnBackground: true,
   autoLockIdleMinutes: 5,
   debugLogging: false,
+  maxPasswordAttempts: 5,
 };
 
 export default class EncryptedFoldersPlugin extends Plugin {
@@ -194,18 +196,20 @@ export default class EncryptedFoldersPlugin extends Plugin {
             .setTitle('Unlock folder')
             .setIcon('unlock')
             .onClick(() => {
-              new PasswordModal(this.app, 'Unlock folder', async (password) => {
-                try {
-                  const success = await this.folderService.unlockFolder(folder, password);
-                  if (success) {
-                    new Notice('Folder unlocked!');
-                  } else {
-                    new Notice('Incorrect password.');
+              new PasswordModal(
+                this.app,
+                'Unlock folder',
+                async (password) => {
+                  try {
+                    return await this.folderService.unlockFolder(folder, password);
+                  } catch (e) {
+                    console.error(e);
+                    throw e;
                   }
-                } catch (e) {
-                  new Notice(`Unlock failed: ${e.message}`);
-                }
-              }).open();
+                },
+                false,
+                this.settings.maxPasswordAttempts,
+              ).open();
             });
         });
 
@@ -214,18 +218,20 @@ export default class EncryptedFoldersPlugin extends Plugin {
             .setTitle('Unlock with recovery key')
             .setIcon('key')
             .onClick(() => {
-              new PasswordModal(this.app, 'Enter recovery key', async (recoveryKey) => {
-                try {
-                  const success = await this.folderService.unlockFolder(folder, recoveryKey, true);
-                  if (success) {
-                    new Notice('Folder unlocked with recovery key!');
-                  } else {
-                    new Notice('Invalid recovery key.');
+              new PasswordModal(
+                this.app,
+                'Enter recovery key',
+                async (recoveryKey) => {
+                  try {
+                    return await this.folderService.unlockFolder(folder, recoveryKey, true);
+                  } catch (e) {
+                    console.error(e);
+                    throw e;
                   }
-                } catch (e) {
-                  new Notice(`Unlock failed: ${e.message}`);
-                }
-              }).open();
+                },
+                false,
+                this.settings.maxPasswordAttempts,
+              ).open();
             });
         });
       }
@@ -274,8 +280,10 @@ export default class EncryptedFoldersPlugin extends Plugin {
                 } else {
                   new Notice('Folder initialized. Ready for encryption.');
                 }
+                return true;
               },
               true,
+              this.settings.maxPasswordAttempts,
             ).open();
           });
       });

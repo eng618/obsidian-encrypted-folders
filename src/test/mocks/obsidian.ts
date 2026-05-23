@@ -115,6 +115,77 @@ export class Vault {
   });
 }
 
+export class Modal {
+  contentEl = document.createElement('div');
+  onOpen() {}
+  onClose() {}
+  close() {
+    this.onClose();
+  }
+}
+
+(HTMLElement.prototype as any).empty = function () {
+  this.innerHTML = '';
+};
+
+(HTMLElement.prototype as any).createEl = function (tag: string, options: Record<string, unknown> = {}) {
+  const el = document.createElement(tag);
+  if (options.text) {
+    el.textContent = String(options.text);
+  }
+  if (options.cls) {
+    el.className = String(options.cls);
+  }
+  this.appendChild(el);
+  return el;
+};
+
+export class Setting {
+  constructor(public containerEl: HTMLElement) {}
+  setName(name: string) {
+    return this;
+  }
+  setHeading() {
+    return this;
+  }
+  setDesc(desc: string) {
+    return this;
+  }
+  addButton(cb: (btn: Record<string, unknown>) => void) {
+    cb({
+      setButtonText: vi.fn().mockReturnThis(),
+      setCta: vi.fn().mockReturnThis(),
+      setWarning: vi.fn().mockReturnThis(),
+      setTooltip: vi.fn().mockReturnThis(),
+      onClick: vi.fn().mockReturnThis(),
+    });
+    return this;
+  }
+  addToggle(cb: (t: Record<string, unknown>) => void) {
+    cb({
+      setValue: vi.fn().mockReturnThis(),
+      onChange: vi.fn().mockReturnThis(),
+    });
+    return this;
+  }
+  addText(cb: (t: Record<string, unknown>) => void) {
+    cb({
+      setPlaceholder: vi.fn().mockReturnThis(),
+      onChange: vi.fn().mockReturnThis(),
+      inputEl: { type: '', focus: vi.fn() },
+    });
+    return this;
+  }
+  addExtraButton(cb: (btn: Record<string, unknown>) => void) {
+    cb({
+      setIcon: vi.fn().mockReturnThis(),
+      setTooltip: vi.fn().mockReturnThis(),
+      onClick: vi.fn().mockReturnThis(),
+    });
+    return this;
+  }
+}
+
 export class Notice {
   constructor(message: string) {
     console.log('Notice:', message);

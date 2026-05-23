@@ -72,6 +72,20 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
+      .setName('Max password attempts')
+      .setDesc('Number of failed password attempts before applying exponential backoff.')
+      .addText((text) => {
+        text.inputEl.type = 'number';
+        text.inputEl.min = '1';
+        text.inputEl.step = '1';
+        text.setValue(String(this.plugin.settings.maxPasswordAttempts)).onChange(async (value) => {
+          const parsed = Number.parseInt(value, 10);
+          this.plugin.settings.maxPasswordAttempts = Number.isFinite(parsed) ? Math.max(1, parsed) : 5;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(containerEl)
       .setName('Sync diagnostics')
       .setDesc('Enable debug logs for cross-device sync detection, migration, and lock state transitions.')
       .addToggle((toggle) =>

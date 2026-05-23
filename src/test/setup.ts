@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { webcrypto } from 'node:crypto';
 
 // Polyfill crypto for both Node and jsdom environments
