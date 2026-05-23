@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/eng618/obsidian-encrypted-folders/compare/1.3.0...1.4.0) (2026-05-23)
+
+
+### Features
+
+* Automate versions.json updates via new workflow on release PRs and remove redundant logic from release.yml ([2511843](https://github.com/eng618/obsidian-encrypted-folders/commit/25118437b2b5108e4d2c34a09fa1a710445e0555))
+
 ## [1.3.0](https://github.com/eng618/obsidian-encrypted-folders/compare/1.2.0...1.3.0) (2026-05-23)
 
 
