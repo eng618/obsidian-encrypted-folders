@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/eng618/obsidian-encrypted-folders/compare/1.1.0...1.2.0) (2026-05-23)
+
+
+### Features
+
+* Add brute-force protection to password modal with configurable retry limits and exponential backoff ([af91e81](https://github.com/eng618/obsidian-encrypted-folders/commit/af91e81e39f830514449b5b7aded8fbf231248a6))
+* Implement transactional folder encryption with automatic rollback on failure ([27cd9a7](https://github.com/eng618/obsidian-encrypted-folders/commit/27cd9a708fbc41ccc5d8169dea4eaaf8984ccc65))
+
 ## [1.1.0](https://github.com/eng618/obsidian-encrypted-folders/compare/1.0.0...1.1.0) (2026-03-10)
 
 
