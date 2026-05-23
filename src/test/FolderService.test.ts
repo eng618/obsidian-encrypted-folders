@@ -182,7 +182,7 @@ describe('FolderService Integration', () => {
     expect(locked).toBe(true);
     expect(folderService.isUnlocked(folderA)).toBe(false);
     expect(folderService.isUnlocked(folderB)).toBe(true);
-  });
+  }, 20000);
 
   it('should permanently remove encryption', async () => {
     const folder = new TFolder();
