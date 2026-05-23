@@ -455,4 +455,70 @@ describe('FolderService Integration', () => {
     const unlockedMetadata = JSON.parse(new TextDecoder().decode(unlockedMetaData));
     expect(unlockedMetadata.state).toBe('unlocked');
   });
+
+  it('should rollback to plaintext if encryption is interrupted', async () => {
+    const folder = new TFolder();
+    folder.path = 'rollback-test';
+    folder.children = [];
+    (app.vault as any).files.set(folder.path, folder);
+
+    const file1 = new TFile();
+    file1.name = 'note1.md';
+    file1.path = 'rollback-test/note1.md';
+    file1.stat = { size: 10, mtime: 0, ctime: 0 };
+    (file1 as any).data = new TextEncoder().encode('content 1').buffer;
+    file1.parent = folder;
+    folder.children.push(file1);
+    (app.vault as any).files.set(file1.path, file1);
+
+    const file2 = new TFile();
+    file2.name = 'note2.md';
+    file2.path = 'rollback-test/note2.md';
+    file2.stat = { size: 10, mtime: 0, ctime: 0 };
+    (file2 as any).data = new TextEncoder().encode('content 2').buffer;
+    file2.parent = folder;
+    folder.children.push(file2);
+    (app.vault as any).files.set(file2.path, file2);
+
+    const password = 'password123';
+
+    // Mock a failure during the second file's processing
+    const originalWriteBinary = fileService.writeBinary.bind(fileService);
+    fileService.writeBinary = async (path: string, data: ArrayBuffer) => {
+      if (path === 'rollback-test/note2.md.locked') {
+        throw new Error('Disk full or crash');
+      }
+      return originalWriteBinary(path, data);
+    };
+
+    try {
+      await folderService.createEncryptedFolder(folder, password, true);
+      expect('should have failed').toBe('failed');
+    } catch (e) {
+      expect(e).toBeDefined();
+    }
+
+    // Restore original writeBinary for verification
+    fileService.writeBinary = originalWriteBinary;
+
+    // File 1 should have been rolled back to plaintext
+    const restoredFile1 = getOptionalTFile('rollback-test/note1.md');
+    expect(restoredFile1).not.toBeNull();
+    if (restoredFile1) {
+      const data = await app.vault.readBinary(restoredFile1);
+      expect(new TextDecoder().decode(data)).toBe('content 1');
+    }
+
+    // File 2 should still be plaintext (never encrypted)
+    const restoredFile2 = getOptionalTFile('rollback-test/note2.md');
+    expect(restoredFile2).not.toBeNull();
+    if (restoredFile2) {
+      const data = await app.vault.readBinary(restoredFile2);
+      expect(new TextDecoder().decode(data)).toBe('content 2');
+    }
+
+    // No .locked files should remain
+    expect(app.vault.getAbstractFileByPath('rollback-test/note1.md.locked')).toBeNull();
+    expect(app.vault.getAbstractFileByPath('rollback-test/note2.md.locked')).toBeNull();
+  });
 });

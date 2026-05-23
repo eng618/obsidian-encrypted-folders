@@ -419,21 +419,59 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   async encryptFolderContents(folder: TFolder, key: CryptoKey): Promise<number> {
     const children = [...folder.children];
     let encryptedCount = 0;
-    for (const child of children) {
-      if (child instanceof TFile) {
-        if (child.name === this.META_FILE_NAME || child.name === this.README_FILE_NAME) {
-          continue;
+    const processedFiles: { originalPath: string; lockedPath: string }[] = [];
+
+    try {
+      for (const child of children) {
+        if (child instanceof TFile) {
+          if (child.name === this.META_FILE_NAME || child.name === this.README_FILE_NAME) {
+            continue;
+          }
+          const lockedPath = normalizePath(child.path + this.LOCKED_EXTENSION);
+
+          // Staging: write encrypted version first, then delete original
+          const data = await this.fileService.readBinary(child);
+          if (!this.hasMagic(data)) {
+            const result = await this.encryptionService.encryptWithKey(data, key);
+            const combined = this.combineBuffersWithMagic(result.iv, result.ciphertext);
+            await this.fileService.writeBinary(lockedPath, combined);
+
+            await this.fileService.shredFile(child);
+            processedFiles.push({ originalPath: child.path, lockedPath });
+            encryptedCount += 1;
+          }
+        } else if (child instanceof TFolder) {
+          encryptedCount += await this.encryptFolderContents(child, key);
         }
-        const encrypted = await this.encryptFile(child, key);
-        if (encrypted) {
-          encryptedCount += 1;
-        }
-      } else if (child instanceof TFolder) {
-        encryptedCount += await this.encryptFolderContents(child, key);
       }
+    } catch (error) {
+      this.debug('Encryption failed mid-process, attempting rollback', { error, processedFiles });
+      await this.rollbackEncryption(processedFiles, key);
+      throw error;
     }
 
     return encryptedCount;
+  }
+
+  private async rollbackEncryption(
+    processedFiles: { originalPath: string; lockedPath: string }[],
+    key: CryptoKey,
+  ): Promise<void> {
+    for (const file of processedFiles) {
+      try {
+        const data = await this.fileService.readBinary(this.fileService.getFile(file.lockedPath)!);
+        const { iv, ciphertext } = this.splitMagicBuffer(data);
+        const plaintext = await this.encryptionService.decryptWithKey(
+          this.toBufferView(ciphertext),
+          key,
+          this.toBufferView(iv),
+        );
+        await this.fileService.writeBinary(file.originalPath, plaintext);
+        await this.app.fileManager.trashFile(this.fileService.getFile(file.lockedPath)!);
+      } catch (rollbackError) {
+        this.debug('Rollback failed for file', { path: file.originalPath, rollbackError });
+      }
+    }
   }
 
   async decryptFolderContents(folder: TFolder, key: CryptoKey): Promise<void> {
@@ -451,6 +489,8 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   }
 
   async encryptFile(file: TFile, key: CryptoKey): Promise<boolean> {
+    // This method is now integrated into encryptFolderContents for better transaction control.
+    // Keeping it for possible external use or future refactor, but internal logic was moved.
     const data = await this.fileService.readBinary(file);
     if (this.hasMagic(data)) {
       return false;
