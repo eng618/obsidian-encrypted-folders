@@ -33,6 +33,19 @@ jobs:
         if: ${{ steps.release.outputs.release_created }}
         run: bun install
 
+      - name: Update versions.json
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          npm_package_version: ${{ steps.release.outputs.version }}
+        run: |
+          bun scripts/version-bump.mjs
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add versions.json
+          # Only commit if versions.json actually changed
+          git diff --cached --quiet || git commit -m "chore: update versions.json for ${{ steps.release.outputs.version }} [skip ci]"
+          git push
+
       - name: Build
         if: ${{ steps.release.outputs.release_created }}
         run: bun run build
