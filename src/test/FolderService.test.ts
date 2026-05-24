@@ -29,6 +29,30 @@ describe('FolderService Integration', () => {
     return file instanceof TFile ? file : null;
   };
 
+  const addFolder = (path: string, parent?: TFolder): TFolder => {
+    const folder = new TFolder();
+    folder.path = path;
+    folder.children = [];
+    if (parent) {
+      folder.parent = parent;
+      parent.children.push(folder);
+    }
+    (app.vault as any).files.set(folder.path, folder);
+    return folder;
+  };
+
+  const addFile = (folder: TFolder, name: string, content: string): TFile => {
+    const file = new TFile();
+    file.name = name;
+    file.path = `${folder.path}/${name}`;
+    file.stat = { size: content.length, mtime: 0, ctime: 0 };
+    (file as any).data = new TextEncoder().encode(content).buffer;
+    file.parent = folder;
+    folder.children.push(file);
+    (app.vault as any).files.set(file.path, file);
+    return file;
+  };
+
   test('should encrypt and unlock a folder with contents', async () => {
     // Setup mock folder and file
     const folder = new TFolder();
@@ -519,5 +543,80 @@ describe('FolderService Integration', () => {
     // No .locked files should remain
     expect(app.vault.getAbstractFileByPath('rollback-test/note1.md.locked')).toBeNull();
     expect(app.vault.getAbstractFileByPath('rollback-test/note2.md.locked')).toBeNull();
+  });
+
+  it('should detect and reprocess plaintext files added to a locked folder', async () => {
+    const folder = addFolder('locked-drop');
+    addFile(folder, 'existing.md', 'existing secret');
+
+    await folderService.createEncryptedFolder(folder, 'password123', true);
+
+    const dropped = addFile(folder, 'dropped.md', 'new secret');
+    expect(folderService.findLockedEncryptedParentWithPlaintext(dropped)).toBe(folder);
+    expect(folderService.getPlaintextFilesInLockedFolder(folder).map((file) => file.path)).toEqual([
+      'locked-drop/dropped.md',
+    ]);
+
+    const success = await folderService.reprocessLockedFolder(folder, 'password123');
+    expect(success).toBe(true);
+    expect(folderService.isUnlocked(folder)).toBe(false);
+    expect(app.vault.getAbstractFileByPath('locked-drop/dropped.md')).toBeNull();
+
+    const lockedDropped = requireTFile('locked-drop/dropped.md.locked');
+    const encryptedData = await app.vault.readBinary(lockedDropped);
+    expect(new TextDecoder().decode(new Uint8Array(encryptedData).slice(0, 4))).toBe('ENC!');
+
+    const metaFile = requireTFile('locked-drop/obsidian-folder-meta.json');
+    const metadata = JSON.parse(new TextDecoder().decode(await app.vault.readBinary(metaFile)));
+    expect(metadata.state).toBe('locked');
+    expect(metadata.expectedLockedFiles).toBe(2);
+    expect(metadata.lastError).toBeUndefined();
+  });
+
+  it('should reprocess plaintext files added in nested folders', async () => {
+    const folder = addFolder('locked-nested-drop');
+    const child = addFolder('locked-nested-drop/child', folder);
+    addFile(folder, 'existing.md', 'existing secret');
+
+    await folderService.createEncryptedFolder(folder, 'password123', true);
+
+    const dropped = addFile(child, 'nested.md', 'nested secret');
+    expect(folderService.findLockedEncryptedParentWithPlaintext(dropped)).toBe(folder);
+
+    const success = await folderService.reprocessLockedFolder(folder, 'password123');
+    expect(success).toBe(true);
+    expect(app.vault.getAbstractFileByPath('locked-nested-drop/child/nested.md')).toBeNull();
+    expect(app.vault.getAbstractFileByPath('locked-nested-drop/child/nested.md.locked')).toBeDefined();
+  });
+
+  it('should leave plaintext untouched when locked folder reprocessing has the wrong password', async () => {
+    const folder = addFolder('locked-drop-wrong-password');
+    addFile(folder, 'existing.md', 'existing secret');
+
+    await folderService.createEncryptedFolder(folder, 'password123', true);
+    addFile(folder, 'dropped.md', 'new secret');
+
+    const success = await folderService.reprocessLockedFolder(folder, 'wrongpass');
+    expect(success).toBe(false);
+    expect(app.vault.getAbstractFileByPath('locked-drop-wrong-password/dropped.md')).toBeDefined();
+    expect(app.vault.getAbstractFileByPath('locked-drop-wrong-password/dropped.md.locked')).toBeNull();
+
+    const metaFile = requireTFile('locked-drop-wrong-password/obsidian-folder-meta.json');
+    const metadata = JSON.parse(new TextDecoder().decode(await app.vault.readBinary(metaFile)));
+    expect(metadata.state).toBe('error');
+    expect(metadata.lastError).toContain('Authentication failed');
+  });
+
+  it('should reprocess locked folder additions with a recovery key', async () => {
+    const folder = addFolder('locked-drop-recovery');
+    addFile(folder, 'existing.md', 'existing secret');
+
+    const recoveryKey = await folderService.createEncryptedFolder(folder, 'password123', true);
+    addFile(folder, 'dropped.md', 'new secret');
+
+    const success = await folderService.reprocessLockedFolder(folder, recoveryKey, true);
+    expect(success).toBe(true);
+    expect(app.vault.getAbstractFileByPath('locked-drop-recovery/dropped.md')).toBeNull();
+    expect(app.vault.getAbstractFileByPath('locked-drop-recovery/dropped.md.locked')).toBeDefined();
   });
 });

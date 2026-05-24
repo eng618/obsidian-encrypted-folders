@@ -28,6 +28,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
   folderService: FolderService;
 
   private readonly autoLockCheckIntervalMs = 30 * 1000;
+  private readonly lockedFolderReprocessDelayMs = 500;
+  private lockedFolderReprocessTimers: Map<string, number> = new Map();
+  private lockedFolderReprocessPrompts: Set<string> = new Set();
 
   async onload() {
     await this.loadSettings();
@@ -71,6 +74,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
         }
         if (file instanceof TFolder || file instanceof TFile) {
           this.folderService.recordActivityForItem(file);
+          this.queueLockedFolderReprocessForItem(file);
         }
         this.folderService.requestSyncFolders('rename');
       }),
@@ -90,6 +94,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
       this.app.vault.on('create', (file) => {
         if (file instanceof TFolder || file instanceof TFile) {
           this.folderService.recordActivityForItem(file);
+          this.queueLockedFolderReprocessForItem(file);
         }
         if (file instanceof TFolder) {
           void this.folderService.reconcileFolderState(file);
@@ -111,6 +116,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
         }
         if (file instanceof TFolder || file instanceof TFile) {
           this.folderService.recordActivityForItem(file);
+          this.queueLockedFolderReprocessForItem(file);
         }
         if (file.parent instanceof TFolder) {
           void this.folderService.reconcileFolderState(file.parent);
@@ -184,6 +190,63 @@ export default class EncryptedFoldersPlugin extends Plugin {
   private async runLockFolder(folder: TFolder): Promise<void> {
     await this.folderService.lockFolder(folder);
     new Notice('Folder locked.');
+  }
+
+  private queueLockedFolderReprocessForItem(item: TFile | TFolder): void {
+    const folder = this.folderService.findLockedEncryptedParentWithPlaintext(item);
+    if (!folder) {
+      return;
+    }
+
+    const folderPath = folder.path;
+    const existingTimer = this.lockedFolderReprocessTimers.get(folderPath);
+    if (existingTimer) {
+      window.clearTimeout(existingTimer);
+    }
+
+    const timer = window.setTimeout(() => {
+      this.lockedFolderReprocessTimers.delete(folderPath);
+      void this.promptForLockedFolderReprocess(folder);
+    }, this.lockedFolderReprocessDelayMs);
+
+    this.lockedFolderReprocessTimers.set(folderPath, timer);
+  }
+
+  private async promptForLockedFolderReprocess(folder: TFolder): Promise<void> {
+    const currentFolder = this.app.vault.getAbstractFileByPath(folder.path);
+    if (!(currentFolder instanceof TFolder)) {
+      return;
+    }
+
+    const folderToReprocess = this.folderService.findLockedEncryptedParentWithPlaintext(currentFolder);
+    if (!folderToReprocess || this.lockedFolderReprocessPrompts.has(folderToReprocess.path)) {
+      return;
+    }
+
+    this.lockedFolderReprocessPrompts.add(folderToReprocess.path);
+    new Notice(`New unencrypted files were added to locked folder "${folderToReprocess.path}".`);
+
+    const modal = new PasswordModal(
+      this.app,
+      'Encrypt new files',
+      async (password) => {
+        const success = await this.folderService.reprocessLockedFolder(folderToReprocess, password);
+        if (success) {
+          new Notice('New files encrypted. Folder remains locked.');
+        } else {
+          new Notice('Could not encrypt new files. Check the password and try again.');
+        }
+        return success;
+      },
+      false,
+      this.settings.maxPasswordAttempts,
+    );
+    const onClose = modal.onClose.bind(modal);
+    modal.onClose = () => {
+      this.lockedFolderReprocessPrompts.delete(folderToReprocess.path);
+      onClose();
+    };
+    modal.open();
   }
 
   private handleFolderMenu(menu: Menu, folder: TFolder) {
