@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.5.0](https://github.com/eng618/obsidian-encrypted-folders/compare/1.4.0...1.5.0) (2026-05-24)
+
+
+### Features
+
+* Add prompt to reprocess and encrypt new plaintext files added to locked folders ([9ba7dfe](https://github.com/eng618/obsidian-encrypted-folders/commit/9ba7dfebb16ad785eae0e3d8899e0b75283e85ec))
+* Add required confirmation input to RemovalModal before deleting encrypted folders ([7488f33](https://github.com/eng618/obsidian-encrypted-folders/commit/7488f33e32d9d665401467b45e661c69961e5b6e))
+* Processing enhancements ([#59](https://github.com/eng618/obsidian-encrypted-folders/issues/59)) ([99603e2](https://github.com/eng618/obsidian-encrypted-folders/commit/99603e2d8d59ff08b15c0f845f1e9ab3ca638766))
+
 ## [1.4.0](https://github.com/eng618/obsidian-encrypted-folders/compare/1.3.0...1.4.0) (2026-05-23)
 
 
