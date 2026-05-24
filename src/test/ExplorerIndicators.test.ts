@@ -10,6 +10,7 @@ class MockPlugin {
   settings: any = {
     autoLockOnBackground: true,
     autoLockIdleMinutes: 5,
+    autoLockWarningSeconds: 60,
     debugLogging: false,
     maxPasswordAttempts: 5,
   };

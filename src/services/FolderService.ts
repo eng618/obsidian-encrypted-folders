@@ -8,6 +8,14 @@ export interface AutoLockSettings {
   lockOnBackground: boolean;
 }
 
+export interface IdleLockCountdown {
+  folderPath: string;
+  lastActivityAt: number;
+  locksAt: number;
+  remainingMs: number;
+  isExpired: boolean;
+}
+
 export type FolderProcessingOperation = 'encrypt' | 'decrypt';
 export type FolderProcessingStatus = 'preparing' | 'processing' | 'complete' | 'error';
 
@@ -197,6 +205,36 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
       return timestamp - lastActivityAt >= idleTimeoutMs;
     });
+  }
+
+  getIdleLockCountdowns(timestamp = Date.now()): IdleLockCountdown[] {
+    const idleTimeoutMs = this.getIdleTimeoutMs();
+    if (idleTimeoutMs === null) {
+      return [];
+    }
+
+    return Array.from(this.unlockedFolders.keys())
+      .map((folderPath) => {
+        const lastActivityAt = this.unlockedFolderActivityAt.get(folderPath);
+        if (lastActivityAt === undefined) {
+          return null;
+        }
+
+        const locksAt = lastActivityAt + idleTimeoutMs;
+        return {
+          folderPath,
+          lastActivityAt,
+          locksAt,
+          remainingMs: Math.max(0, locksAt - timestamp),
+          isExpired: timestamp >= locksAt,
+        };
+      })
+      .filter((countdown): countdown is IdleLockCountdown => countdown !== null)
+      .sort((a, b) => a.locksAt - b.locksAt);
+  }
+
+  getNextIdleLockCountdown(timestamp = Date.now()): IdleLockCountdown | null {
+    return this.getIdleLockCountdowns(timestamp)[0] ?? null;
   }
 
   private async lockTrackedFolders(folderPaths?: string[], options?: FolderProcessingOptions): Promise<boolean> {

@@ -44,6 +44,8 @@ The plugin automatically locks all open folders when:
 - You close the Obsidian application.
 - This ensures no plaintext is left on disk when you are not actively using your vault.
 
+When inactivity auto-lock is enabled, the status bar shows the next unlocked folder due to lock. The plugin can also show a configurable notice before the timer expires.
+
 ### 5. User Guidance (New)
 
 When a folder is locked, the plugin generates a `README_ENCRYPTED.md` file. This tells the user (and any other apps) that the folder is purposely locked and provides instructions on how to restore the files using the password.

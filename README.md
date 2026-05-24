@@ -22,7 +22,7 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 - **Recovery Keys**: Generate a 32-character recovery key during setup to ensure you never lose access to your data.
 - **Secure File Shredding**: Automatically overwrites plaintext files with secure random data before re-encrypting to prevent forensic disk recovery.
 - **Auto-Lock Security**: All folders are automatically re-encrypted and locked when the plugin is disabled or Obsidian is closed.
-- **Configurable Safeguards**: Lock unlocked folders automatically when Obsidian goes into the background or after a configurable period of per-folder inactivity.
+- **Configurable Safeguards**: Lock unlocked folders automatically when Obsidian goes into the background or after a configurable period of per-folder inactivity, with an optional countdown warning.
 - **Large Folder Progress**: Shows a blocking progress indicator during long encrypt/decrypt operations and processes eligible files with conservative bounded parallelism.
 - **Exit Strategy**: Permanently remove encryption from a folder if you no longer need it, restoring files to normal plaintext Obsidian management.
 - **Integrity First**: Prevents nested encryption within already encrypted folders to ensure a simple, reliable vault structure.
@@ -61,9 +61,10 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 
 - By default, unlocked folders are locked automatically when Obsidian moves to the background.
 - By default, each unlocked folder is also locked after 5 minutes without activity in that folder.
+- The status bar shows the next inactive folder due to lock, and a warning notice appears 60 seconds before auto-lock by default.
 - Opening, editing, or otherwise working in files inside an unlocked folder refreshes that folder's inactivity timer.
 - You can change both safeguards in **Settings → Encrypted Folders**.
-- Set the inactivity timeout to `0` if you want to disable that safeguard.
+- Set the inactivity timeout or warning seconds to `0` if you want to disable that safeguard.
 
 ### Removing Encryption Permanently
 

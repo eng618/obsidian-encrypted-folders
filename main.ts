@@ -1,7 +1,7 @@
 import { Menu, Notice, Plugin, TFile, TFolder } from 'obsidian';
 import { EncryptionService } from './src/services/EncryptionService';
 import { FileService } from './src/services/FileService';
-import type { FolderProcessingOptions } from './src/services/FolderService';
+import type { FolderProcessingOptions, IdleLockCountdown } from './src/services/FolderService';
 import { FolderService } from './src/services/FolderService';
 import { PasswordModal } from './src/ui/PasswordModal';
 import { ProcessingModal } from './src/ui/ProcessingModal';
@@ -12,6 +12,7 @@ import { EncryptedFoldersSettingTab } from './src/ui/SettingsTab';
 interface EncryptedFoldersSettings {
   autoLockOnBackground: boolean;
   autoLockIdleMinutes: number;
+  autoLockWarningSeconds: number;
   debugLogging: boolean;
   maxPasswordAttempts: number;
 }
@@ -19,6 +20,7 @@ interface EncryptedFoldersSettings {
 const DEFAULT_SETTINGS: EncryptedFoldersSettings = {
   autoLockOnBackground: true,
   autoLockIdleMinutes: 5,
+  autoLockWarningSeconds: 60,
   debugLogging: false,
   maxPasswordAttempts: 5,
 };
@@ -29,10 +31,12 @@ export default class EncryptedFoldersPlugin extends Plugin {
   fileService: FileService;
   folderService: FolderService;
 
-  private readonly autoLockCheckIntervalMs = 30 * 1000;
+  private readonly autoLockCheckIntervalMs = 1000;
   private readonly lockedFolderReprocessDelayMs = 500;
   private lockedFolderReprocessTimers: Map<string, number> = new Map();
   private lockedFolderReprocessPrompts: Set<string> = new Set();
+  private idleLockStatusBarEl: HTMLElement | null = null;
+  private idleLockWarningKeys: Set<string> = new Set();
 
   async onload() {
     await this.loadSettings();
@@ -47,6 +51,8 @@ export default class EncryptedFoldersPlugin extends Plugin {
       lockOnBackground: this.settings.autoLockOnBackground,
     });
     await this.folderService.syncFolders();
+    this.idleLockStatusBarEl = this.addStatusBarItem();
+    this.updateIdleLockCountdownStatus();
 
     this.registerEvent(
       this.app.workspace.on('file-menu', (menu, file) => {
@@ -175,10 +181,75 @@ export default class EncryptedFoldersPlugin extends Plugin {
   }
 
   private async handleIdleAutoLock(): Promise<void> {
+    this.updateIdleLockCountdownStatus();
+    this.maybeShowIdleLockWarning();
+
     const locked = await this.folderService.runIdleAutoLock();
     if (locked) {
+      this.updateIdleLockCountdownStatus();
       new Notice('Inactive unlocked folders were locked automatically.');
     }
+  }
+
+  private getIdleLockWarningSeconds(): number {
+    const value = this.settings.autoLockWarningSeconds;
+    return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+  }
+
+  private getIdleLockWarningKey(countdown: IdleLockCountdown): string {
+    return `${countdown.folderPath}:${countdown.locksAt}`;
+  }
+
+  private formatCountdown(ms: number): string {
+    const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  private updateIdleLockCountdownStatus(): void {
+    if (!this.idleLockStatusBarEl) {
+      return;
+    }
+
+    const countdown = this.folderService.getNextIdleLockCountdown();
+    if (!countdown) {
+      this.idleLockStatusBarEl.textContent = '';
+      this.idleLockStatusBarEl.style.display = 'none';
+      this.idleLockWarningKeys.clear();
+      return;
+    }
+
+    this.idleLockStatusBarEl.style.display = '';
+    this.idleLockStatusBarEl.textContent = `Encrypted Folders: locks "${
+      countdown.folderPath
+    }" in ${this.formatCountdown(countdown.remainingMs)}`;
+  }
+
+  private maybeShowIdleLockWarning(): void {
+    const warningSeconds = this.getIdleLockWarningSeconds();
+    if (warningSeconds <= 0) {
+      return;
+    }
+
+    const countdown = this.folderService.getNextIdleLockCountdown();
+    if (!countdown || countdown.isExpired) {
+      return;
+    }
+
+    if (countdown.remainingMs > warningSeconds * 1000) {
+      return;
+    }
+
+    const warningKey = this.getIdleLockWarningKey(countdown);
+    if (this.idleLockWarningKeys.has(warningKey)) {
+      return;
+    }
+
+    this.idleLockWarningKeys.add(warningKey);
+    new Notice(
+      `Folder "${countdown.folderPath}" will lock in ${this.formatCountdown(countdown.remainingMs)} due to inactivity.`,
+    );
   }
 
   private recordActiveFolderActivity(): void {
@@ -435,6 +506,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
 
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    this.settings.autoLockWarningSeconds = Number.isFinite(this.settings.autoLockWarningSeconds)
+      ? Math.max(0, Math.floor(this.settings.autoLockWarningSeconds))
+      : DEFAULT_SETTINGS.autoLockWarningSeconds;
   }
 
   async saveSettings() {

@@ -208,6 +208,61 @@ describe('FolderService Integration', () => {
     expect(folderService.isUnlocked(folderB)).toBe(true);
   }, 20000);
 
+  it('should report idle lock countdowns for unlocked folders', async () => {
+    const folder = new TFolder();
+    folder.path = 'idle-countdown';
+    folder.children = [];
+    (app.vault as any).files.set(folder.path, folder);
+
+    folderService.setAutoLockSettings({ idleMinutes: 5, lockOnBackground: true });
+    await folderService.createEncryptedFolder(folder, 'password123');
+    folderService.recordActivityForItem(folder, 1_000);
+
+    const countdown = folderService.getNextIdleLockCountdown(121_000);
+    expect(countdown).toMatchObject({
+      folderPath: 'idle-countdown',
+      lastActivityAt: 1_000,
+      locksAt: 301_000,
+      remainingMs: 180_000,
+      isExpired: false,
+    });
+  });
+
+  it('should return the earliest idle lock countdown when multiple folders are unlocked', async () => {
+    const folderA = new TFolder();
+    folderA.path = 'idle-earliest-a';
+    folderA.children = [];
+    (app.vault as any).files.set(folderA.path, folderA);
+
+    const folderB = new TFolder();
+    folderB.path = 'idle-earliest-b';
+    folderB.children = [];
+    (app.vault as any).files.set(folderB.path, folderB);
+
+    folderService.setAutoLockSettings({ idleMinutes: 5, lockOnBackground: true });
+    await folderService.createEncryptedFolder(folderA, 'password123');
+    await folderService.createEncryptedFolder(folderB, 'password456');
+    folderService.recordActivityForItem(folderA, 60_000);
+    folderService.recordActivityForItem(folderB, 10_000);
+
+    const countdown = folderService.getNextIdleLockCountdown(100_000);
+    expect(countdown?.folderPath).toBe('idle-earliest-b');
+    expect(countdown?.remainingMs).toBe(210_000);
+  });
+
+  it('should not report idle lock countdowns when inactivity locking is disabled', async () => {
+    const folder = new TFolder();
+    folder.path = 'idle-countdown-disabled';
+    folder.children = [];
+    (app.vault as any).files.set(folder.path, folder);
+
+    folderService.setAutoLockSettings({ idleMinutes: 0, lockOnBackground: true });
+    await folderService.createEncryptedFolder(folder, 'password123');
+
+    expect(folderService.getIdleLockCountdowns(1_000)).toEqual([]);
+    expect(folderService.getNextIdleLockCountdown(1_000)).toBeNull();
+  });
+
   it('should permanently remove encryption', async () => {
     const folder = new TFolder();
     folder.path = 'to-be-decrypted';
