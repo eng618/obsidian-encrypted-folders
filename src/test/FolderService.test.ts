@@ -208,6 +208,61 @@ describe('FolderService Integration', () => {
     expect(folderService.isUnlocked(folderB)).toBe(true);
   }, 20000);
 
+  it('should report idle lock countdowns for unlocked folders', async () => {
+    const folder = new TFolder();
+    folder.path = 'idle-countdown';
+    folder.children = [];
+    (app.vault as any).files.set(folder.path, folder);
+
+    folderService.setAutoLockSettings({ idleMinutes: 5, lockOnBackground: true });
+    await folderService.createEncryptedFolder(folder, 'password123');
+    folderService.recordActivityForItem(folder, 1_000);
+
+    const countdown = folderService.getNextIdleLockCountdown(121_000);
+    expect(countdown).toMatchObject({
+      folderPath: 'idle-countdown',
+      lastActivityAt: 1_000,
+      locksAt: 301_000,
+      remainingMs: 180_000,
+      isExpired: false,
+    });
+  });
+
+  it('should return the earliest idle lock countdown when multiple folders are unlocked', async () => {
+    const folderA = new TFolder();
+    folderA.path = 'idle-earliest-a';
+    folderA.children = [];
+    (app.vault as any).files.set(folderA.path, folderA);
+
+    const folderB = new TFolder();
+    folderB.path = 'idle-earliest-b';
+    folderB.children = [];
+    (app.vault as any).files.set(folderB.path, folderB);
+
+    folderService.setAutoLockSettings({ idleMinutes: 5, lockOnBackground: true });
+    await folderService.createEncryptedFolder(folderA, 'password123');
+    await folderService.createEncryptedFolder(folderB, 'password456');
+    folderService.recordActivityForItem(folderA, 60_000);
+    folderService.recordActivityForItem(folderB, 10_000);
+
+    const countdown = folderService.getNextIdleLockCountdown(100_000);
+    expect(countdown?.folderPath).toBe('idle-earliest-b');
+    expect(countdown?.remainingMs).toBe(210_000);
+  });
+
+  it('should not report idle lock countdowns when inactivity locking is disabled', async () => {
+    const folder = new TFolder();
+    folder.path = 'idle-countdown-disabled';
+    folder.children = [];
+    (app.vault as any).files.set(folder.path, folder);
+
+    folderService.setAutoLockSettings({ idleMinutes: 0, lockOnBackground: true });
+    await folderService.createEncryptedFolder(folder, 'password123');
+
+    expect(folderService.getIdleLockCountdowns(1_000)).toEqual([]);
+    expect(folderService.getNextIdleLockCountdown(1_000)).toBeNull();
+  });
+
   it('should permanently remove encryption', async () => {
     const folder = new TFolder();
     folder.path = 'to-be-decrypted';
@@ -618,5 +673,107 @@ describe('FolderService Integration', () => {
     expect(success).toBe(true);
     expect(app.vault.getAbstractFileByPath('locked-drop-recovery/dropped.md')).toBeNull();
     expect(app.vault.getAbstractFileByPath('locked-drop-recovery/dropped.md.locked')).toBeDefined();
+  });
+
+  it('should report progress while encrypting folder contents', async () => {
+    const folder = addFolder('progress-encrypt');
+    addFile(folder, 'a.md', 'a');
+    addFile(folder, 'b.md', 'b');
+    const progress: string[] = [];
+    const key = await encryptionService.generateMasterKey();
+
+    const encryptedCount = await folderService.encryptFolderContents(folder, key, {
+      onProgress: (event) => {
+        progress.push(`${event.status}:${event.processedFiles}/${event.totalFiles}`);
+      },
+    });
+
+    expect(encryptedCount).toBe(2);
+    expect(progress[0]).toBe('preparing:0/2');
+    expect(progress).toContain('complete:2/2');
+  });
+
+  it('should process small files with limited parallelism', async () => {
+    const folder = addFolder('parallel-encrypt');
+    addFile(folder, 'a.md', 'a');
+    addFile(folder, 'b.md', 'b');
+    addFile(folder, 'c.md', 'c');
+    const key = await encryptionService.generateMasterKey();
+    const originalReadBinary = fileService.readBinary.bind(fileService);
+    let activeReads = 0;
+    let maxActiveReads = 0;
+
+    fileService.readBinary = async (file: TFile) => {
+      activeReads += 1;
+      maxActiveReads = Math.max(maxActiveReads, activeReads);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const result = await originalReadBinary(file);
+      activeReads -= 1;
+      return result;
+    };
+
+    await folderService.encryptFolderContents(folder, key, {
+      maxConcurrentFiles: 2,
+      maxConcurrentBytes: 1024,
+    });
+
+    fileService.readBinary = originalReadBinary;
+    expect(maxActiveReads).toBe(2);
+  });
+
+  it('should process files larger than the byte budget alone', async () => {
+    const folder = addFolder('large-file-budget');
+    const largeFile = addFile(folder, 'large.md', 'large');
+    largeFile.stat.size = 100;
+    const smallFile = addFile(folder, 'small.md', 'small');
+    smallFile.stat.size = 1;
+    const key = await encryptionService.generateMasterKey();
+    const originalReadBinary = fileService.readBinary.bind(fileService);
+    let activeReads = 0;
+    let maxActiveReads = 0;
+
+    fileService.readBinary = async (file: TFile) => {
+      activeReads += 1;
+      maxActiveReads = Math.max(maxActiveReads, activeReads);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const result = await originalReadBinary(file);
+      activeReads -= 1;
+      return result;
+    };
+
+    await folderService.encryptFolderContents(folder, key, {
+      maxConcurrentFiles: 3,
+      maxConcurrentBytes: 50,
+    });
+
+    fileService.readBinary = originalReadBinary;
+    expect(maxActiveReads).toBe(1);
+  });
+
+  it('should cancel folder processing and rollback encrypted files', async () => {
+    const folder = addFolder('cancel-encrypt');
+    addFile(folder, 'a.md', 'a');
+    addFile(folder, 'b.md', 'b');
+    const key = await encryptionService.generateMasterKey();
+    const abortController = new AbortController();
+    const abortError = new Error('Operation cancelled.');
+    abortError.name = 'AbortError';
+
+    await expect(
+      folderService.encryptFolderContents(folder, key, {
+        maxConcurrentFiles: 1,
+        signal: abortController.signal,
+        onProgress: (event) => {
+          if (event.status === 'processing' && event.processedFiles === 0) {
+            abortController.abort(abortError);
+          }
+        },
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(app.vault.getAbstractFileByPath('cancel-encrypt/a.md.locked')).toBeNull();
+    expect(app.vault.getAbstractFileByPath('cancel-encrypt/b.md.locked')).toBeNull();
+    expect(app.vault.getAbstractFileByPath('cancel-encrypt/a.md')).toBeDefined();
+    expect(app.vault.getAbstractFileByPath('cancel-encrypt/b.md')).toBeDefined();
   });
 });

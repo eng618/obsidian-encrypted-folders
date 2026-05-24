@@ -119,6 +119,9 @@ export class Modal {
   contentEl = document.createElement('div');
   onOpen() {}
   onClose() {}
+  open() {
+    this.onOpen();
+  }
   close() {
     this.onClose();
   }
@@ -192,6 +195,26 @@ export class Notice {
   }
 }
 
+export class Plugin {
+  app = new App();
+  addStatusBarItem = vi.fn(() => document.createElement('div'));
+  addSettingTab = vi.fn();
+  loadData = vi.fn(async () => ({}));
+  saveData = vi.fn(async () => {});
+  registerDomEvent = vi.fn();
+  registerEvent = vi.fn();
+  registerInterval = vi.fn();
+}
+
+export class PluginSettingTab {
+  containerEl = document.createElement('div');
+
+  constructor(
+    public app: App,
+    public plugin: Plugin,
+  ) {}
+}
+
 export class App {
   vault: Vault;
   fileManager: {
@@ -200,6 +223,7 @@ export class App {
   workspace: {
     on: (...args: any[]) => any;
     getLeavesOfType: (...args: any[]) => any;
+    getActiveFile: (...args: any[]) => any;
   };
   constructor() {
     this.vault = new Vault();
@@ -214,6 +238,7 @@ export class App {
     this.workspace = {
       on: vi.fn(),
       getLeavesOfType: vi.fn().mockReturnValue([]),
+      getActiveFile: vi.fn().mockReturnValue(null),
     };
   }
 }

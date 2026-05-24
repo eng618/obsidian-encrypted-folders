@@ -72,6 +72,20 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
+      .setName('Warn before inactivity lock')
+      .setDesc('Show a notice this many seconds before the next inactive folder locks. Set to 0 to disable.')
+      .addText((text) => {
+        text.inputEl.type = 'number';
+        text.inputEl.min = '0';
+        text.inputEl.step = '1';
+        text.setValue(String(this.plugin.settings.autoLockWarningSeconds)).onChange(async (value) => {
+          const parsed = Number.parseInt(value, 10);
+          this.plugin.settings.autoLockWarningSeconds = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(containerEl)
       .setName('Max password attempts')
       .setDesc('Number of failed password attempts before applying exponential backoff.')
       .addText((text) => {
@@ -106,7 +120,7 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
   }
 
   private async lockAllFolders(): Promise<void> {
-    await this.plugin.folderService.lockAllFolders();
+    await this.plugin.lockAllFoldersWithProgress();
     new Notice('All folders locked.');
   }
 

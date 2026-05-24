@@ -8,6 +8,33 @@ export interface AutoLockSettings {
   lockOnBackground: boolean;
 }
 
+export interface IdleLockCountdown {
+  folderPath: string;
+  lastActivityAt: number;
+  locksAt: number;
+  remainingMs: number;
+  isExpired: boolean;
+}
+
+export type FolderProcessingOperation = 'encrypt' | 'decrypt';
+export type FolderProcessingStatus = 'preparing' | 'processing' | 'complete' | 'error';
+
+export interface FolderProcessingProgress {
+  operation: FolderProcessingOperation;
+  status: FolderProcessingStatus;
+  folderPath: string;
+  totalFiles: number;
+  processedFiles: number;
+  currentFilePath?: string;
+}
+
+export interface FolderProcessingOptions {
+  onProgress?: (progress: FolderProcessingProgress) => void;
+  maxConcurrentFiles?: number;
+  maxConcurrentBytes?: number;
+  signal?: AbortSignal;
+}
+
 export class FolderService {
   private unlockedFolders: Map<string, CryptoKey> = new Map();
   private encryptedFolders: Set<string> = new Set();
@@ -24,6 +51,8 @@ export class FolderService {
   private readonly LOCKED_EXTENSION = '.locked';
   private readonly META_SCHEMA_VERSION = 2;
   private readonly README_FILE_NAME = 'README_ENCRYPTED.md';
+  private readonly DEFAULT_MAX_CONCURRENT_FILES = 3;
+  private readonly DEFAULT_MAX_CONCURRENT_BYTES = 64 * 1024 * 1024;
 
   constructor(
     private encryptionService: EncryptionService,
@@ -179,14 +208,44 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     });
   }
 
-  private async lockTrackedFolders(folderPaths?: string[]): Promise<boolean> {
+  getIdleLockCountdowns(timestamp = Date.now()): IdleLockCountdown[] {
+    const idleTimeoutMs = this.getIdleTimeoutMs();
+    if (idleTimeoutMs === null) {
+      return [];
+    }
+
+    return Array.from(this.unlockedFolders.keys())
+      .map((folderPath) => {
+        const lastActivityAt = this.unlockedFolderActivityAt.get(folderPath);
+        if (lastActivityAt === undefined) {
+          return null;
+        }
+
+        const locksAt = lastActivityAt + idleTimeoutMs;
+        return {
+          folderPath,
+          lastActivityAt,
+          locksAt,
+          remainingMs: Math.max(0, locksAt - timestamp),
+          isExpired: timestamp >= locksAt,
+        };
+      })
+      .filter((countdown): countdown is IdleLockCountdown => countdown !== null)
+      .sort((a, b) => a.locksAt - b.locksAt);
+  }
+
+  getNextIdleLockCountdown(timestamp = Date.now()): IdleLockCountdown | null {
+    return this.getIdleLockCountdowns(timestamp)[0] ?? null;
+  }
+
+  private async lockTrackedFolders(folderPaths?: string[], options?: FolderProcessingOptions): Promise<boolean> {
     let lockedAny = false;
     const paths = folderPaths ?? Array.from(this.unlockedFolders.keys());
 
     for (const path of paths) {
       const folder = this.app.vault.getAbstractFileByPath(path);
       if (folder instanceof TFolder) {
-        await this.lockFolder(folder);
+        await this.lockFolder(folder, options);
         lockedAny = true;
         continue;
       }
@@ -311,6 +370,194 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     return count;
   }
 
+  private collectProcessableFiles(folder: TFolder, mode: FolderProcessingOperation): TFile[] {
+    const stack: TFolder[] = [folder];
+    const files: TFile[] = [];
+
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      const children = [...current.children];
+      for (const child of children) {
+        if (child instanceof TFolder) {
+          stack.push(child);
+          continue;
+        }
+
+        if (!(child instanceof TFile) || this.isProtectedFile(child)) {
+          continue;
+        }
+
+        if (mode === 'encrypt') {
+          if (child.path.endsWith(this.LOCKED_EXTENSION)) {
+            continue;
+          }
+          files.push(child);
+          continue;
+        }
+
+        if (child.path.endsWith(this.LOCKED_EXTENSION)) {
+          files.push(child);
+        }
+      }
+    }
+
+    return files;
+  }
+
+  private reportProgress(
+    operation: FolderProcessingOperation,
+    status: FolderProcessingStatus,
+    folderPath: string,
+    totalFiles: number,
+    processedFiles: number,
+    options?: FolderProcessingOptions,
+    currentFilePath?: string,
+  ): void {
+    options?.onProgress?.({
+      operation,
+      status,
+      folderPath,
+      totalFiles,
+      processedFiles,
+      currentFilePath,
+    });
+  }
+
+  private getFileProcessingSize(file: TFile): number {
+    return Math.max(1, file.stat?.size ?? 1);
+  }
+
+  private createAbortError(): Error {
+    const error = new Error('Operation cancelled.');
+    error.name = 'AbortError';
+    return error;
+  }
+
+  private getAbortReason(signal?: AbortSignal): unknown {
+    if (!signal?.aborted) {
+      return null;
+    }
+
+    return signal.reason ?? this.createAbortError();
+  }
+
+  private throwIfAborted(options?: FolderProcessingOptions): void {
+    const abortReason = this.getAbortReason(options?.signal);
+    if (abortReason) {
+      throw abortReason;
+    }
+  }
+
+  private async processFilesWithLimits<T>(
+    folder: TFolder,
+    operation: FolderProcessingOperation,
+    files: TFile[],
+    options: FolderProcessingOptions | undefined,
+    processFile: (file: TFile) => Promise<T>,
+  ): Promise<T[]> {
+    const maxConcurrentFiles = Math.max(
+      1,
+      Math.floor(options?.maxConcurrentFiles ?? this.DEFAULT_MAX_CONCURRENT_FILES),
+    );
+    const maxConcurrentBytes = Math.max(
+      1,
+      Math.floor(options?.maxConcurrentBytes ?? this.DEFAULT_MAX_CONCURRENT_BYTES),
+    );
+    const results: T[] = [];
+    let activeFiles = 0;
+    let activeBytes = 0;
+    let nextIndex = 0;
+    let processedFiles = 0;
+    let firstError: unknown;
+
+    this.reportProgress(operation, 'preparing', folder.path, files.length, 0, options);
+    this.throwIfAborted(options);
+
+    if (files.length === 0) {
+      this.reportProgress(operation, 'complete', folder.path, 0, 0, options);
+      return results;
+    }
+
+    return await new Promise<T[]>((resolve, reject) => {
+      const markAborted = (): void => {
+        firstError = firstError ?? this.getAbortReason(options?.signal) ?? this.createAbortError();
+        maybeFinish();
+      };
+
+      options?.signal?.addEventListener('abort', markAborted, { once: true });
+
+      const maybeFinish = (): void => {
+        if (activeFiles > 0) {
+          return;
+        }
+
+        if (firstError) {
+          options?.signal?.removeEventListener('abort', markAborted);
+          this.reportProgress(operation, 'error', folder.path, files.length, processedFiles, options);
+          reject(firstError);
+          return;
+        }
+
+        if (nextIndex >= files.length) {
+          options?.signal?.removeEventListener('abort', markAborted);
+          this.reportProgress(operation, 'complete', folder.path, files.length, processedFiles, options);
+          resolve(results);
+        }
+      };
+
+      const launchNext = (): void => {
+        const abortReason = this.getAbortReason(options?.signal);
+        if (abortReason) {
+          firstError = firstError ?? abortReason;
+          maybeFinish();
+          return;
+        }
+
+        while (!firstError && nextIndex < files.length && activeFiles < maxConcurrentFiles) {
+          const file = files[nextIndex];
+          const fileSize = this.getFileProcessingSize(file);
+          const canRunWithActiveBytes = activeBytes + fileSize <= maxConcurrentBytes;
+          if (activeFiles > 0 && !canRunWithActiveBytes) {
+            break;
+          }
+
+          nextIndex += 1;
+          activeFiles += 1;
+          activeBytes += fileSize;
+          this.reportProgress(operation, 'processing', folder.path, files.length, processedFiles, options, file.path);
+
+          void processFile(file)
+            .then((result) => {
+              results.push(result);
+            })
+            .catch((error: unknown) => {
+              firstError = firstError ?? error;
+            })
+            .finally(() => {
+              activeFiles -= 1;
+              activeBytes -= fileSize;
+              processedFiles += 1;
+              this.reportProgress(
+                operation,
+                firstError ? 'error' : 'processing',
+                folder.path,
+                files.length,
+                processedFiles,
+                options,
+                file.path,
+              );
+              launchNext();
+              maybeFinish();
+            });
+        }
+
+        maybeFinish();
+      };
+
+      launchNext();
+    });
+  }
+
   private collectPlaintextFiles(folder: TFolder): TFile[] {
     const stack: TFolder[] = [folder];
     const files: TFile[] = [];
@@ -381,7 +628,12 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
   }
 
-  async createEncryptedFolder(folder: TFolder, password: string, lockImmediately = false): Promise<string> {
+  async createEncryptedFolder(
+    folder: TFolder,
+    password: string,
+    lockImmediately = false,
+    options?: FolderProcessingOptions,
+  ): Promise<string> {
     if (this.isInsideEncryptedFolder(folder)) {
       throw new Error('Nested encryption is not allowed. A parent folder is already encrypted.');
     }
@@ -426,7 +678,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
     if (lockImmediately) {
       try {
-        const encryptedCount = await this.encryptFolderContents(folder, masterKey);
+        const encryptedCount = await this.encryptFolderContents(folder, masterKey, options);
         metadata = {
           ...metadata,
           expectedLockedFiles: encryptedCount,
@@ -465,41 +717,25 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     return ret;
   }
 
-  async encryptFolderContents(folder: TFolder, key: CryptoKey): Promise<number> {
-    const children = [...folder.children];
-    let encryptedCount = 0;
+  async encryptFolderContents(folder: TFolder, key: CryptoKey, options?: FolderProcessingOptions): Promise<number> {
+    const files = this.collectProcessableFiles(folder, 'encrypt');
     const processedFiles: { originalPath: string; lockedPath: string }[] = [];
 
     try {
-      for (const child of children) {
-        if (child instanceof TFile) {
-          if (this.isProtectedFile(child)) {
-            continue;
-          }
-          const lockedPath = normalizePath(child.path + this.LOCKED_EXTENSION);
-
-          // Staging: write encrypted version first, then delete original
-          const data = await this.fileService.readBinary(child);
-          if (!this.hasMagic(data)) {
-            const result = await this.encryptionService.encryptWithKey(data, key);
-            const combined = this.combineBuffersWithMagic(result.iv, result.ciphertext);
-            await this.fileService.writeBinary(lockedPath, combined);
-
-            await this.fileService.shredFile(child);
-            processedFiles.push({ originalPath: child.path, lockedPath });
-            encryptedCount += 1;
-          }
-        } else if (child instanceof TFolder) {
-          encryptedCount += await this.encryptFolderContents(child, key);
+      const results = await this.processFilesWithLimits(folder, 'encrypt', files, options, async (file) => {
+        const lockedPath = normalizePath(file.path + this.LOCKED_EXTENSION);
+        const encrypted = await this.encryptFile(file, key);
+        if (encrypted) {
+          processedFiles.push({ originalPath: file.path, lockedPath });
         }
-      }
+        return encrypted;
+      });
+      return results.filter(Boolean).length;
     } catch (error) {
       this.debug('Encryption failed mid-process, attempting rollback', { error, processedFiles });
       await this.rollbackEncryption(processedFiles, key);
       throw error;
     }
-
-    return encryptedCount;
   }
 
   private async rollbackEncryption(
@@ -523,18 +759,11 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
   }
 
-  async decryptFolderContents(folder: TFolder, key: CryptoKey): Promise<void> {
-    const children = [...folder.children];
-    for (const child of children) {
-      if (child instanceof TFile) {
-        if (this.isProtectedFile(child)) {
-          continue;
-        }
-        await this.decryptFile(child, key);
-      } else if (child instanceof TFolder) {
-        await this.decryptFolderContents(child, key);
-      }
-    }
+  async decryptFolderContents(folder: TFolder, key: CryptoKey, options?: FolderProcessingOptions): Promise<void> {
+    const files = this.collectProcessableFiles(folder, 'decrypt');
+    await this.processFilesWithLimits(folder, 'decrypt', files, options, async (file) => {
+      await this.decryptFile(file, key);
+    });
   }
 
   async encryptFile(file: TFile, key: CryptoKey): Promise<boolean> {
@@ -761,7 +990,12 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     return masterKey;
   }
 
-  async unlockFolder(folder: TFolder, secret: string, isRecovery = false): Promise<boolean> {
+  async unlockFolder(
+    folder: TFolder,
+    secret: string,
+    isRecovery = false,
+    options?: FolderProcessingOptions,
+  ): Promise<boolean> {
     let metadata = await this.readMetadata(folder);
     if (!metadata) {
       return false;
@@ -786,7 +1020,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
       const masterKey = await this.getMasterKeyFromSecret(metadata, secret, isRecovery);
 
-      await this.decryptFolderContents(folder, masterKey);
+      await this.decryptFolderContents(folder, masterKey, options);
 
       const readmeFile = this.fileService.getFile(this.getReadmePath(folder.path));
       if (readmeFile) {
@@ -805,7 +1039,12 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
   }
 
-  async reprocessLockedFolder(folder: TFolder, secret: string, isRecovery = false): Promise<boolean> {
+  async reprocessLockedFolder(
+    folder: TFolder,
+    secret: string,
+    isRecovery = false,
+    options?: FolderProcessingOptions,
+  ): Promise<boolean> {
     if (!this.isEncryptedFolder(folder) || this.isUnlocked(folder)) {
       return false;
     }
@@ -828,16 +1067,14 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
     try {
       const masterKey = await this.getMasterKeyFromSecret(metadata, secret, isRecovery);
-      let encryptedAny = false;
-
-      for (const file of plaintextFiles) {
+      const results = await this.processFilesWithLimits(folder, 'encrypt', plaintextFiles, options, async (file) => {
         const currentFile = this.fileService.getFile(file.path);
         if (!currentFile) {
-          continue;
+          return false;
         }
 
-        encryptedAny = (await this.encryptFile(currentFile, masterKey)) || encryptedAny;
-      }
+        return await this.encryptFile(currentFile, masterKey);
+      });
 
       if (!this.fileService.exists(this.getReadmePath(folder.path))) {
         await this.fileService.writeBinary(
@@ -854,7 +1091,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
         lastError: undefined,
       });
 
-      this.debug('locked folder reprocessed', { folder: folder.path, encryptedAny });
+      this.debug('locked folder reprocessed', { folder: folder.path, encryptedAny: results.some(Boolean) });
       return true;
     } catch (error) {
       await this.transitionMetadataState(folder, metadata, 'error', String(error));
@@ -863,7 +1100,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
   }
 
-  async lockFolder(folder: TFolder): Promise<void> {
+  async lockFolder(folder: TFolder, options?: FolderProcessingOptions): Promise<void> {
     const folderKey = this.toFolderKey(folder.path);
     const key = this.unlockedFolders.get(folderKey);
     if (!key) {
@@ -878,7 +1115,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     metadata = await this.transitionMetadataState(folder, metadata, 'locking');
 
     try {
-      const encryptedCount = await this.encryptFolderContents(folder, key);
+      const encryptedCount = await this.encryptFolderContents(folder, key, options);
       metadata = {
         ...metadata,
         expectedLockedFiles: encryptedCount,
@@ -897,8 +1134,8 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
   }
 
-  async lockAllFolders(): Promise<void> {
-    await this.lockTrackedFolders();
+  async lockAllFolders(options?: FolderProcessingOptions): Promise<void> {
+    await this.lockTrackedFolders(undefined, options);
     this.unlockedFolders.clear();
   }
 

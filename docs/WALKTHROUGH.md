@@ -20,6 +20,7 @@ When you encrypt a folder, the plugin recursively visits every subfolder and fil
 - It skips the `obsidian-folder-meta.json` file which contains the encrypted keys.
 - It uses a "Magic" header (`ENC!`) to distinguish encrypted files from plaintext.
 - It renames encrypted files to `[filename].locked` to protect them from external indexing or corruption.
+- For large folders, it shows a blocking progress modal and processes a small number of files in parallel while keeping large files within a conservative memory budget.
 
 ### 2. Recovery Keys
 
@@ -43,9 +44,15 @@ The plugin automatically locks all open folders when:
 - You close the Obsidian application.
 - This ensures no plaintext is left on disk when you are not actively using your vault.
 
+When inactivity auto-lock is enabled, the status bar shows the next unlocked folder due to lock. The plugin can also show a configurable notice before the timer expires.
+
 ### 5. User Guidance (New)
 
 When a folder is locked, the plugin generates a `README_ENCRYPTED.md` file. This tells the user (and any other apps) that the folder is purposely locked and provides instructions on how to restore the files using the password.
+
+### 6. Long-Running Operations
+
+Encrypting, locking, unlocking, and reprocessing newly added files can take time for large folders. The plugin displays a progress modal with a warning to keep Obsidian open until the operation completes.
 
 ## 🧪 Testing and Verification
 

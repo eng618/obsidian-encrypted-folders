@@ -1,8 +1,10 @@
 import { Menu, Notice, Plugin, TFile, TFolder } from 'obsidian';
 import { EncryptionService } from './src/services/EncryptionService';
 import { FileService } from './src/services/FileService';
+import type { FolderProcessingOptions, IdleLockCountdown } from './src/services/FolderService';
 import { FolderService } from './src/services/FolderService';
 import { PasswordModal } from './src/ui/PasswordModal';
+import { ProcessingModal } from './src/ui/ProcessingModal';
 import { RecoveryKeyModal } from './src/ui/RecoveryKeyModal';
 import { RemovalModal } from './src/ui/RemovalModal';
 import { EncryptedFoldersSettingTab } from './src/ui/SettingsTab';
@@ -10,6 +12,7 @@ import { EncryptedFoldersSettingTab } from './src/ui/SettingsTab';
 interface EncryptedFoldersSettings {
   autoLockOnBackground: boolean;
   autoLockIdleMinutes: number;
+  autoLockWarningSeconds: number;
   debugLogging: boolean;
   maxPasswordAttempts: number;
 }
@@ -17,6 +20,7 @@ interface EncryptedFoldersSettings {
 const DEFAULT_SETTINGS: EncryptedFoldersSettings = {
   autoLockOnBackground: true,
   autoLockIdleMinutes: 5,
+  autoLockWarningSeconds: 60,
   debugLogging: false,
   maxPasswordAttempts: 5,
 };
@@ -27,10 +31,12 @@ export default class EncryptedFoldersPlugin extends Plugin {
   fileService: FileService;
   folderService: FolderService;
 
-  private readonly autoLockCheckIntervalMs = 30 * 1000;
+  private readonly autoLockCheckIntervalMs = 1000;
   private readonly lockedFolderReprocessDelayMs = 500;
   private lockedFolderReprocessTimers: Map<string, number> = new Map();
   private lockedFolderReprocessPrompts: Set<string> = new Set();
+  private idleLockStatusBarEl: HTMLElement | null = null;
+  private idleLockWarningKeys: Set<string> = new Set();
 
   async onload() {
     await this.loadSettings();
@@ -45,6 +51,8 @@ export default class EncryptedFoldersPlugin extends Plugin {
       lockOnBackground: this.settings.autoLockOnBackground,
     });
     await this.folderService.syncFolders();
+    this.idleLockStatusBarEl = this.addStatusBarItem();
+    this.updateIdleLockCountdownStatus();
 
     this.registerEvent(
       this.app.workspace.on('file-menu', (menu, file) => {
@@ -173,10 +181,76 @@ export default class EncryptedFoldersPlugin extends Plugin {
   }
 
   private async handleIdleAutoLock(): Promise<void> {
+    this.updateIdleLockCountdownStatus();
+    this.maybeShowIdleLockWarning();
+
     const locked = await this.folderService.runIdleAutoLock();
     if (locked) {
+      this.updateIdleLockCountdownStatus();
       new Notice('Inactive unlocked folders were locked automatically.');
     }
+  }
+
+  private getIdleLockWarningSeconds(): number {
+    const value = this.settings.autoLockWarningSeconds;
+    return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+  }
+
+  private getIdleLockWarningKey(countdown: IdleLockCountdown): string {
+    return `${countdown.folderPath}:${countdown.locksAt}`;
+  }
+
+  private formatCountdown(ms: number): string {
+    const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  private updateIdleLockCountdownStatus(): void {
+    if (!this.idleLockStatusBarEl) {
+      return;
+    }
+
+    const countdown = this.folderService.getNextIdleLockCountdown();
+    if (!countdown) {
+      this.idleLockStatusBarEl.textContent = '';
+      this.idleLockStatusBarEl.style.display = 'none';
+      this.idleLockWarningKeys.clear();
+      return;
+    }
+
+    this.idleLockStatusBarEl.style.display = '';
+    const folderName = countdown.folderPath.split('/').pop() || countdown.folderPath;
+    this.idleLockStatusBarEl.textContent = `Encrypted Folders: locks "${
+      folderName
+    }" in ${this.formatCountdown(countdown.remainingMs)}`;
+  }
+
+  private maybeShowIdleLockWarning(): void {
+    const warningSeconds = this.getIdleLockWarningSeconds();
+    if (warningSeconds <= 0) {
+      return;
+    }
+
+    const countdown = this.folderService.getNextIdleLockCountdown();
+    if (!countdown || countdown.isExpired) {
+      return;
+    }
+
+    if (countdown.remainingMs > warningSeconds * 1000) {
+      return;
+    }
+
+    const warningKey = this.getIdleLockWarningKey(countdown);
+    if (this.idleLockWarningKeys.has(warningKey)) {
+      return;
+    }
+
+    this.idleLockWarningKeys.add(warningKey);
+    new Notice(
+      `Folder "${countdown.folderPath}" will lock in ${this.formatCountdown(countdown.remainingMs)} due to inactivity.`,
+    );
   }
 
   private recordActiveFolderActivity(): void {
@@ -184,12 +258,59 @@ export default class EncryptedFoldersPlugin extends Plugin {
   }
 
   private handleLockFolderClick(folder: TFolder): void {
-    void this.runLockFolder(folder);
+    void this.runLockFolder(folder).catch((error: unknown) => {
+      if (this.isAbortError(error)) {
+        return;
+      }
+
+      throw error;
+    });
   }
 
   private async runLockFolder(folder: TFolder): Promise<void> {
-    await this.folderService.lockFolder(folder);
+    await this.runWithProcessingModal('Locking folder', (options) => this.folderService.lockFolder(folder, options));
     new Notice('Folder locked.');
+  }
+
+  async lockAllFoldersWithProgress(): Promise<void> {
+    await this.runWithProcessingModal('Locking all folders', (options) => this.folderService.lockAllFolders(options));
+  }
+
+  private async runWithProcessingModal<T>(
+    title: string,
+    operation: (options: FolderProcessingOptions) => Promise<T>,
+  ): Promise<T> {
+    const abortController = new AbortController();
+    const modal = new ProcessingModal(this.app, title, () => {
+      abortController.abort(this.createAbortError());
+    });
+    modal.open();
+
+    try {
+      return await operation({
+        onProgress: (progress) => {
+          modal.updateProgress(progress);
+        },
+        signal: abortController.signal,
+      });
+    } catch (error) {
+      if (this.isAbortError(error)) {
+        new Notice('Operation cancelled.');
+      }
+      throw error;
+    } finally {
+      modal.close();
+    }
+  }
+
+  private createAbortError(): Error {
+    const error = new Error('Operation cancelled.');
+    error.name = 'AbortError';
+    return error;
+  }
+
+  private isAbortError(error: unknown): boolean {
+    return error instanceof Error && error.name === 'AbortError';
   }
 
   private queueLockedFolderReprocessForItem(item: TFile | TFolder): void {
@@ -230,7 +351,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
       this.app,
       'Encrypt new files',
       async (password) => {
-        const success = await this.folderService.reprocessLockedFolder(folderToReprocess, password);
+        const success = await this.runWithProcessingModal('Encrypting new files', (options) =>
+          this.folderService.reprocessLockedFolder(folderToReprocess, password, false, options),
+        );
         if (success) {
           new Notice('New files encrypted. Folder remains locked.');
         } else {
@@ -273,7 +396,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
                 'Unlock folder',
                 async (password) => {
                   try {
-                    return await this.folderService.unlockFolder(folder, password);
+                    return await this.runWithProcessingModal('Unlocking folder', (options) =>
+                      this.folderService.unlockFolder(folder, password, false, options),
+                    );
                   } catch (e) {
                     console.error(e);
                     throw e;
@@ -295,7 +420,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
                 'Enter recovery key',
                 async (recoveryKey) => {
                   try {
-                    return await this.folderService.unlockFolder(folder, recoveryKey, true);
+                    return await this.runWithProcessingModal('Unlocking folder', (options) =>
+                      this.folderService.unlockFolder(folder, recoveryKey, true, options),
+                    );
                   } catch (e) {
                     console.error(e);
                     throw e;
@@ -344,7 +471,11 @@ export default class EncryptedFoldersPlugin extends Plugin {
               this.app,
               'Encrypt folder',
               async (password, lockImmediately) => {
-                const recoveryKey = await this.folderService.createEncryptedFolder(folder, password, lockImmediately);
+                const recoveryKey = lockImmediately
+                  ? await this.runWithProcessingModal('Encrypting folder', (options) =>
+                      this.folderService.createEncryptedFolder(folder, password, lockImmediately, options),
+                    )
+                  : await this.folderService.createEncryptedFolder(folder, password, lockImmediately);
                 new RecoveryKeyModal(this.app, recoveryKey).open();
 
                 if (lockImmediately) {
@@ -401,6 +532,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
 
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    this.settings.autoLockWarningSeconds = Number.isFinite(this.settings.autoLockWarningSeconds)
+      ? Math.max(0, Math.floor(this.settings.autoLockWarningSeconds))
+      : DEFAULT_SETTINGS.autoLockWarningSeconds;
   }
 
   async saveSettings() {
