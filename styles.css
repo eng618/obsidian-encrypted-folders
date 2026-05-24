@@ -82,6 +82,10 @@
   font-size: 0.9em;
 }
 
+.ef-processing-cancel {
+  margin-top: 8px;
+}
+
 @keyframes ef-processing-spin {
   to {
     transform: rotate(360deg);

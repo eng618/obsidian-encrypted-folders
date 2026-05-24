@@ -32,6 +32,7 @@ export interface FolderProcessingOptions {
   onProgress?: (progress: FolderProcessingProgress) => void;
   maxConcurrentFiles?: number;
   maxConcurrentBytes?: number;
+  signal?: AbortSignal;
 }
 
 export class FolderService {
@@ -369,11 +370,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     return count;
   }
 
-  private collectProcessableFiles(
-    folder: TFolder,
-    mode: FolderProcessingOperation,
-    includePlaintextOnly = false,
-  ): TFile[] {
+  private collectProcessableFiles(folder: TFolder, mode: FolderProcessingOperation): TFile[] {
     const stack: TFolder[] = [folder];
     const files: TFile[] = [];
 
@@ -398,7 +395,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
           continue;
         }
 
-        if (!includePlaintextOnly && child.path.endsWith(this.LOCKED_EXTENSION)) {
+        if (child.path.endsWith(this.LOCKED_EXTENSION)) {
           files.push(child);
         }
       }
@@ -430,6 +427,27 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     return Math.max(1, file.stat?.size ?? 1);
   }
 
+  private createAbortError(): Error {
+    const error = new Error('Operation cancelled.');
+    error.name = 'AbortError';
+    return error;
+  }
+
+  private getAbortReason(signal?: AbortSignal): unknown {
+    if (!signal?.aborted) {
+      return null;
+    }
+
+    return signal.reason ?? this.createAbortError();
+  }
+
+  private throwIfAborted(options?: FolderProcessingOptions): void {
+    const abortReason = this.getAbortReason(options?.signal);
+    if (abortReason) {
+      throw abortReason;
+    }
+  }
+
   private async processFilesWithLimits<T>(
     folder: TFolder,
     operation: FolderProcessingOperation,
@@ -453,6 +471,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     let firstError: unknown;
 
     this.reportProgress(operation, 'preparing', folder.path, files.length, 0, options);
+    this.throwIfAborted(options);
 
     if (files.length === 0) {
       this.reportProgress(operation, 'complete', folder.path, 0, 0, options);
@@ -460,24 +479,40 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
 
     return await new Promise<T[]>((resolve, reject) => {
+      const markAborted = (): void => {
+        firstError = firstError ?? this.getAbortReason(options?.signal) ?? this.createAbortError();
+        maybeFinish();
+      };
+
+      options?.signal?.addEventListener('abort', markAborted, { once: true });
+
       const maybeFinish = (): void => {
         if (activeFiles > 0) {
           return;
         }
 
         if (firstError) {
+          options?.signal?.removeEventListener('abort', markAborted);
           this.reportProgress(operation, 'error', folder.path, files.length, processedFiles, options);
           reject(firstError);
           return;
         }
 
         if (nextIndex >= files.length) {
+          options?.signal?.removeEventListener('abort', markAborted);
           this.reportProgress(operation, 'complete', folder.path, files.length, processedFiles, options);
           resolve(results);
         }
       };
 
       const launchNext = (): void => {
+        const abortReason = this.getAbortReason(options?.signal);
+        if (abortReason) {
+          firstError = firstError ?? abortReason;
+          maybeFinish();
+          return;
+        }
+
         while (!firstError && nextIndex < files.length && activeFiles < maxConcurrentFiles) {
           const file = files[nextIndex];
           const fileSize = this.getFileProcessingSize(file);

@@ -749,4 +749,31 @@ describe('FolderService Integration', () => {
     fileService.readBinary = originalReadBinary;
     expect(maxActiveReads).toBe(1);
   });
+
+  it('should cancel folder processing and rollback encrypted files', async () => {
+    const folder = addFolder('cancel-encrypt');
+    addFile(folder, 'a.md', 'a');
+    addFile(folder, 'b.md', 'b');
+    const key = await encryptionService.generateMasterKey();
+    const abortController = new AbortController();
+    const abortError = new Error('Operation cancelled.');
+    abortError.name = 'AbortError';
+
+    await expect(
+      folderService.encryptFolderContents(folder, key, {
+        maxConcurrentFiles: 1,
+        signal: abortController.signal,
+        onProgress: (event) => {
+          if (event.status === 'processing' && event.processedFiles === 0) {
+            abortController.abort(abortError);
+          }
+        },
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(app.vault.getAbstractFileByPath('cancel-encrypt/a.md.locked')).toBeNull();
+    expect(app.vault.getAbstractFileByPath('cancel-encrypt/b.md.locked')).toBeNull();
+    expect(app.vault.getAbstractFileByPath('cancel-encrypt/a.md')).toBeDefined();
+    expect(app.vault.getAbstractFileByPath('cancel-encrypt/b.md')).toBeDefined();
+  });
 });

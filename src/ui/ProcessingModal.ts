@@ -5,10 +5,12 @@ export class ProcessingModal extends Modal {
   private statusEl: HTMLElement | null = null;
   private detailEl: HTMLElement | null = null;
   private progressEl: HTMLProgressElement | null = null;
+  private cancelButtonEl: HTMLButtonElement | null = null;
 
   constructor(
     app: App,
     private title: string,
+    private onCancel?: () => void,
   ) {
     super(app);
   }
@@ -43,6 +45,18 @@ export class ProcessingModal extends Modal {
       cls: 'ef-processing-warning',
       text: 'Keep Obsidian open. Interrupting this operation may leave the folder in a recovery state.',
     });
+
+    if (this.onCancel) {
+      this.cancelButtonEl = document.createElement('button');
+      this.cancelButtonEl.className = 'mod-warning ef-processing-cancel';
+      this.cancelButtonEl.textContent = 'Cancel operation';
+      this.cancelButtonEl.addEventListener('click', () => {
+        this.cancelButtonEl?.setAttribute('disabled', 'true');
+        this.cancelButtonEl!.textContent = 'Cancelling...';
+        this.onCancel?.();
+      });
+      contentEl.appendChild(this.cancelButtonEl);
+    }
   }
 
   updateProgress(progress: FolderProcessingProgress): void {
@@ -71,6 +85,7 @@ export class ProcessingModal extends Modal {
 
   onClose(): void {
     const { contentEl } = this;
+    this.cancelButtonEl = null;
     contentEl.classList.remove('ef-processing-modal');
     contentEl.empty();
   }

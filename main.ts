@@ -221,8 +221,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
     }
 
     this.idleLockStatusBarEl.style.display = '';
+    const folderName = countdown.folderPath.split('/').pop() || countdown.folderPath;
     this.idleLockStatusBarEl.textContent = `Encrypted Folders: locks "${
-      countdown.folderPath
+      folderName
     }" in ${this.formatCountdown(countdown.remainingMs)}`;
   }
 
@@ -257,7 +258,13 @@ export default class EncryptedFoldersPlugin extends Plugin {
   }
 
   private handleLockFolderClick(folder: TFolder): void {
-    void this.runLockFolder(folder);
+    void this.runLockFolder(folder).catch((error: unknown) => {
+      if (this.isAbortError(error)) {
+        return;
+      }
+
+      throw error;
+    });
   }
 
   private async runLockFolder(folder: TFolder): Promise<void> {
@@ -273,7 +280,10 @@ export default class EncryptedFoldersPlugin extends Plugin {
     title: string,
     operation: (options: FolderProcessingOptions) => Promise<T>,
   ): Promise<T> {
-    const modal = new ProcessingModal(this.app, title);
+    const abortController = new AbortController();
+    const modal = new ProcessingModal(this.app, title, () => {
+      abortController.abort(this.createAbortError());
+    });
     modal.open();
 
     try {
@@ -281,10 +291,26 @@ export default class EncryptedFoldersPlugin extends Plugin {
         onProgress: (progress) => {
           modal.updateProgress(progress);
         },
+        signal: abortController.signal,
       });
+    } catch (error) {
+      if (this.isAbortError(error)) {
+        new Notice('Operation cancelled.');
+      }
+      throw error;
     } finally {
       modal.close();
     }
+  }
+
+  private createAbortError(): Error {
+    const error = new Error('Operation cancelled.');
+    error.name = 'AbortError';
+    return error;
+  }
+
+  private isAbortError(error: unknown): boolean {
+    return error instanceof Error && error.name === 'AbortError';
   }
 
   private queueLockedFolderReprocessForItem(item: TFile | TFolder): void {
