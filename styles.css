@@ -40,3 +40,50 @@
   opacity: 0.6;
   margin-left: 4px;
 }
+
+.ef-processing-body {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 12px 0;
+}
+
+.ef-processing-spinner {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border: 3px solid var(--background-modifier-border);
+  border-top-color: var(--interactive-accent);
+  border-radius: 50%;
+  animation: ef-processing-spin 0.9s linear infinite;
+}
+
+.ef-processing-text {
+  min-width: 0;
+}
+
+.ef-processing-status {
+  font-weight: 600;
+}
+
+.ef-processing-detail {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+.ef-processing-progress {
+  width: 100%;
+}
+
+.ef-processing-warning {
+  color: var(--text-warning);
+  font-size: 0.9em;
+}
+
+@keyframes ef-processing-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

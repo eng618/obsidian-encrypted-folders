@@ -106,7 +106,7 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
   }
 
   private async lockAllFolders(): Promise<void> {
-    await this.plugin.folderService.lockAllFolders();
+    await this.plugin.lockAllFoldersWithProgress();
     new Notice('All folders locked.');
   }
 

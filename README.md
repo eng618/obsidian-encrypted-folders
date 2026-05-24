@@ -23,6 +23,7 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 - **Secure File Shredding**: Automatically overwrites plaintext files with secure random data before re-encrypting to prevent forensic disk recovery.
 - **Auto-Lock Security**: All folders are automatically re-encrypted and locked when the plugin is disabled or Obsidian is closed.
 - **Configurable Safeguards**: Lock unlocked folders automatically when Obsidian goes into the background or after a configurable period of per-folder inactivity.
+- **Large Folder Progress**: Shows a blocking progress indicator during long encrypt/decrypt operations and processes eligible files with conservative bounded parallelism.
 - **Exit Strategy**: Permanently remove encryption from a folder if you no longer need it, restoring files to normal plaintext Obsidian management.
 - **Integrity First**: Prevents nested encryption within already encrypted folders to ensure a simple, reliable vault structure.
 - **Sync-Safe State Tracking**: Lock and unlock operations are journaled in metadata to improve cross-device consistency during delayed or partial sync.

@@ -619,4 +619,79 @@ describe('FolderService Integration', () => {
     expect(app.vault.getAbstractFileByPath('locked-drop-recovery/dropped.md')).toBeNull();
     expect(app.vault.getAbstractFileByPath('locked-drop-recovery/dropped.md.locked')).toBeDefined();
   });
+
+  it('should report progress while encrypting folder contents', async () => {
+    const folder = addFolder('progress-encrypt');
+    addFile(folder, 'a.md', 'a');
+    addFile(folder, 'b.md', 'b');
+    const progress: string[] = [];
+    const key = await encryptionService.generateMasterKey();
+
+    const encryptedCount = await folderService.encryptFolderContents(folder, key, {
+      onProgress: (event) => {
+        progress.push(`${event.status}:${event.processedFiles}/${event.totalFiles}`);
+      },
+    });
+
+    expect(encryptedCount).toBe(2);
+    expect(progress[0]).toBe('preparing:0/2');
+    expect(progress).toContain('complete:2/2');
+  });
+
+  it('should process small files with limited parallelism', async () => {
+    const folder = addFolder('parallel-encrypt');
+    addFile(folder, 'a.md', 'a');
+    addFile(folder, 'b.md', 'b');
+    addFile(folder, 'c.md', 'c');
+    const key = await encryptionService.generateMasterKey();
+    const originalReadBinary = fileService.readBinary.bind(fileService);
+    let activeReads = 0;
+    let maxActiveReads = 0;
+
+    fileService.readBinary = async (file: TFile) => {
+      activeReads += 1;
+      maxActiveReads = Math.max(maxActiveReads, activeReads);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const result = await originalReadBinary(file);
+      activeReads -= 1;
+      return result;
+    };
+
+    await folderService.encryptFolderContents(folder, key, {
+      maxConcurrentFiles: 2,
+      maxConcurrentBytes: 1024,
+    });
+
+    fileService.readBinary = originalReadBinary;
+    expect(maxActiveReads).toBe(2);
+  });
+
+  it('should process files larger than the byte budget alone', async () => {
+    const folder = addFolder('large-file-budget');
+    const largeFile = addFile(folder, 'large.md', 'large');
+    largeFile.stat.size = 100;
+    const smallFile = addFile(folder, 'small.md', 'small');
+    smallFile.stat.size = 1;
+    const key = await encryptionService.generateMasterKey();
+    const originalReadBinary = fileService.readBinary.bind(fileService);
+    let activeReads = 0;
+    let maxActiveReads = 0;
+
+    fileService.readBinary = async (file: TFile) => {
+      activeReads += 1;
+      maxActiveReads = Math.max(maxActiveReads, activeReads);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const result = await originalReadBinary(file);
+      activeReads -= 1;
+      return result;
+    };
+
+    await folderService.encryptFolderContents(folder, key, {
+      maxConcurrentFiles: 3,
+      maxConcurrentBytes: 50,
+    });
+
+    fileService.readBinary = originalReadBinary;
+    expect(maxActiveReads).toBe(1);
+  });
 });

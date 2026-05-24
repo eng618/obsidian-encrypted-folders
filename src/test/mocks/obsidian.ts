@@ -119,6 +119,9 @@ export class Modal {
   contentEl = document.createElement('div');
   onOpen() {}
   onClose() {}
+  open() {
+    this.onOpen();
+  }
   close() {
     this.onClose();
   }

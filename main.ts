@@ -1,8 +1,10 @@
 import { Menu, Notice, Plugin, TFile, TFolder } from 'obsidian';
 import { EncryptionService } from './src/services/EncryptionService';
 import { FileService } from './src/services/FileService';
+import type { FolderProcessingOptions } from './src/services/FolderService';
 import { FolderService } from './src/services/FolderService';
 import { PasswordModal } from './src/ui/PasswordModal';
+import { ProcessingModal } from './src/ui/ProcessingModal';
 import { RecoveryKeyModal } from './src/ui/RecoveryKeyModal';
 import { RemovalModal } from './src/ui/RemovalModal';
 import { EncryptedFoldersSettingTab } from './src/ui/SettingsTab';
@@ -188,8 +190,30 @@ export default class EncryptedFoldersPlugin extends Plugin {
   }
 
   private async runLockFolder(folder: TFolder): Promise<void> {
-    await this.folderService.lockFolder(folder);
+    await this.runWithProcessingModal('Locking folder', (options) => this.folderService.lockFolder(folder, options));
     new Notice('Folder locked.');
+  }
+
+  async lockAllFoldersWithProgress(): Promise<void> {
+    await this.runWithProcessingModal('Locking all folders', (options) => this.folderService.lockAllFolders(options));
+  }
+
+  private async runWithProcessingModal<T>(
+    title: string,
+    operation: (options: FolderProcessingOptions) => Promise<T>,
+  ): Promise<T> {
+    const modal = new ProcessingModal(this.app, title);
+    modal.open();
+
+    try {
+      return await operation({
+        onProgress: (progress) => {
+          modal.updateProgress(progress);
+        },
+      });
+    } finally {
+      modal.close();
+    }
   }
 
   private queueLockedFolderReprocessForItem(item: TFile | TFolder): void {
@@ -230,7 +254,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
       this.app,
       'Encrypt new files',
       async (password) => {
-        const success = await this.folderService.reprocessLockedFolder(folderToReprocess, password);
+        const success = await this.runWithProcessingModal('Encrypting new files', (options) =>
+          this.folderService.reprocessLockedFolder(folderToReprocess, password, false, options),
+        );
         if (success) {
           new Notice('New files encrypted. Folder remains locked.');
         } else {
@@ -273,7 +299,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
                 'Unlock folder',
                 async (password) => {
                   try {
-                    return await this.folderService.unlockFolder(folder, password);
+                    return await this.runWithProcessingModal('Unlocking folder', (options) =>
+                      this.folderService.unlockFolder(folder, password, false, options),
+                    );
                   } catch (e) {
                     console.error(e);
                     throw e;
@@ -295,7 +323,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
                 'Enter recovery key',
                 async (recoveryKey) => {
                   try {
-                    return await this.folderService.unlockFolder(folder, recoveryKey, true);
+                    return await this.runWithProcessingModal('Unlocking folder', (options) =>
+                      this.folderService.unlockFolder(folder, recoveryKey, true, options),
+                    );
                   } catch (e) {
                     console.error(e);
                     throw e;
@@ -344,7 +374,11 @@ export default class EncryptedFoldersPlugin extends Plugin {
               this.app,
               'Encrypt folder',
               async (password, lockImmediately) => {
-                const recoveryKey = await this.folderService.createEncryptedFolder(folder, password, lockImmediately);
+                const recoveryKey = lockImmediately
+                  ? await this.runWithProcessingModal('Encrypting folder', (options) =>
+                      this.folderService.createEncryptedFolder(folder, password, lockImmediately, options),
+                    )
+                  : await this.folderService.createEncryptedFolder(folder, password, lockImmediately);
                 new RecoveryKeyModal(this.app, recoveryKey).open();
 
                 if (lockImmediately) {
