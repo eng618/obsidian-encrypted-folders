@@ -42,7 +42,7 @@
     "@eng618/prettier-config": "^2.10.1",
     "@gv-tech/eslint-config": "^0.1.14",
     "@types/node": "^25.9.1",
-    "@typescript-eslint/eslint-plugin": "^8.59.4",
+    "@typescript-eslint/eslint-plugin": "^8.60.0",
     "@typescript-eslint/parser": "^8.59.4",
     "@vitest/coverage-v8": "^4.0.18",
     "builtin-modules": "5.2.0",
