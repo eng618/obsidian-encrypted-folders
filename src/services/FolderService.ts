@@ -748,15 +748,24 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   ): Promise<void> {
     for (const file of processedFiles) {
       try {
-        const data = await this.fileService.readBinary(this.fileService.getFile(file.lockedPath)!);
-        const { iv, ciphertext } = this.splitMagicBuffer(data);
-        const plaintext = await this.encryptionService.decryptWithKey(
-          this.toBufferView(ciphertext),
-          key,
-          this.toBufferView(iv),
-        );
-        await this.fileService.writeBinary(file.originalPath, plaintext);
-        await this.app.fileManager.trashFile(this.fileService.getFile(file.lockedPath)!);
+        const lockedFile = this.fileService.getFile(file.lockedPath);
+        if (lockedFile) {
+          const data = await this.fileService.readBinary(lockedFile);
+          const { iv, ciphertext } = this.splitMagicBuffer(data);
+          const plaintext = await this.encryptionService.decryptWithKey(
+            this.toBufferView(ciphertext),
+            key,
+            this.toBufferView(iv),
+          );
+          await this.fileService.writeBinary(file.originalPath, plaintext);
+          await this.app.fileManager.trashFile(lockedFile);
+        }
+
+        const tmpPath = normalizePath(`${file.originalPath}${this.LOCKED_EXTENSION}.tmp`);
+        const tmpFile = this.fileService.getFile(tmpPath);
+        if (tmpFile) {
+          await this.app.fileManager.trashFile(tmpFile);
+        }
       } catch (rollbackError) {
         this.debug('Rollback failed for file', { path: file.originalPath, rollbackError });
       }
@@ -765,14 +774,32 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
   async decryptFolderContents(folder: TFolder, key: CryptoKey, options?: FolderProcessingOptions): Promise<void> {
     const files = this.collectProcessableFiles(folder, 'decrypt');
+    const errors: { path: string; error: unknown }[] = [];
+
     await this.processFilesWithLimits(folder, 'decrypt', files, options, async (file) => {
-      await this.decryptFile(file, key);
+      try {
+        await this.decryptFile(file, key);
+      } catch (error) {
+        this.debug('File decryption error', { path: file.path, error });
+        errors.push({ path: file.path, error });
+      }
     });
+
+    if (errors.length > 0) {
+      this.debug('Folder decryption finished with individual file errors', {
+        count: errors.length,
+        total: files.length,
+      });
+      if (errors.length === files.length) {
+        const firstErr = errors[0].error;
+        throw firstErr instanceof Error
+          ? firstErr
+          : new Error(`Failed to decrypt all ${files.length} files in folder.`);
+      }
+    }
   }
 
   async encryptFile(file: TFile, key: CryptoKey): Promise<boolean> {
-    // This method is now integrated into encryptFolderContents for better transaction control.
-    // Keeping it for possible external use or future refactor, but internal logic was moved.
     const data = await this.fileService.readBinary(file);
     if (this.hasMagic(data)) {
       return false;
@@ -780,9 +807,30 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
     const result = await this.encryptionService.encryptWithKey(data, key);
     const combined = this.combineBuffersWithMagic(result.iv, result.ciphertext);
-    const newPath = normalizePath(file.path + this.LOCKED_EXTENSION);
+    const tmpPath = normalizePath(`${file.path}${this.LOCKED_EXTENSION}.tmp`);
+    const finalPath = normalizePath(`${file.path}${this.LOCKED_EXTENSION}`);
 
-    await this.fileService.writeBinary(newPath, combined);
+    // Step 1: Write staging buffer to .locked.tmp
+    const tmpFile = await this.fileService.writeBinary(tmpPath, combined);
+
+    // Step 2: Verify staged ciphertext integrity before touching original plaintext
+    const stagedData = await this.fileService.readBinary(tmpFile);
+    if (!this.hasMagic(stagedData) || stagedData.byteLength !== combined.byteLength) {
+      const currentTmp = this.fileService.getFile(tmpPath);
+      if (currentTmp) {
+        await this.fileService.deleteFile(currentTmp);
+      }
+      throw new Error(`Staging write integrity check failed for file ${file.path}`);
+    }
+
+    // Step 3: Promote staged file to final .locked file
+    await this.fileService.writeBinary(finalPath, combined);
+    const createdTmp = this.fileService.getFile(tmpPath);
+    if (createdTmp) {
+      await this.fileService.deleteFile(createdTmp);
+    }
+
+    // Step 4: Shred and delete original plaintext file ONLY after final ciphertext is verified
     await this.fileService.shredFile(file);
     return true;
   }

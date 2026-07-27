@@ -108,6 +108,19 @@ Ensure the plugin core surface area is functional.
 3. Attempt to unlock the folder using the correct password.
 4. **Verification**: Unlock is rejected with an authentication failure (`Authentication failed: Metadata tampering detected`), protecting against parameter tampering.
 
+### Atomic Staging Writes Check (.locked.tmp)
+
+1. Lock a folder containing notes.
+2. Verify that while encryption is in progress, files are temporarily staged as `.locked.tmp` files.
+3. If an interrupt or write failure occurs during staging, verify that the original plaintext note remains 100% intact on disk and no incomplete `.locked` file is generated.
+
+### Partial Decryption Resilience
+
+1. Lock a folder containing multiple notes.
+2. Manually corrupt the binary ciphertext of one `.locked` note on disk.
+3. Unlock the folder using your password.
+4. **Verification**: Valid notes are restored to plaintext successfully, while the corrupted `.locked` note is left untouched with an error notification logged, preventing total process failure.
+
 ### Session Security
 
 1. Unlock several folders.

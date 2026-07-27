@@ -10,6 +10,7 @@ export class TFile {
 
 export class TFolder {
   path: string;
+  name: string;
   parent: TFolder;
   children: (TFile | TFolder)[];
 }
@@ -219,6 +220,7 @@ export class App {
   vault: Vault;
   fileManager: {
     trashFile: (file: TFile | TFolder) => Promise<void>;
+    renameFile: (file: TFile | TFolder, newPath: string) => Promise<void>;
   };
   workspace: {
     on: (...args: any[]) => any;
@@ -233,6 +235,17 @@ export class App {
         if (file.parent) {
           file.parent.children = file.parent.children.filter((c) => c !== file);
         }
+      }),
+      renameFile: vi.fn(async (file: TFile | TFolder, newPath: string) => {
+        const normalized = normalizePath(newPath);
+        this.vault.files.delete(file.path);
+        if (file.parent) {
+          file.parent.children = file.parent.children.filter((c) => c !== file);
+        }
+        file.path = normalized;
+        const parts = normalized.split('/');
+        file.name = parts.pop() || '';
+        this.vault.files.set(normalized, file);
       }),
     };
     this.workspace = {

@@ -27,6 +27,7 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 - **Exit Strategy**: Permanently remove encryption from a folder if you no longer need it, restoring files to normal plaintext Obsidian management.
 - **Integrity First**: Prevents nested encryption within already encrypted folders to ensure a simple, reliable vault structure.
 - **Sync-Safe State Tracking**: Lock and unlock operations are journaled in metadata to improve cross-device consistency during delayed or partial sync.
+- **Atomic Staging Writes**: Encrypts files to a `.locked.tmp` staging file and verifies ciphertext integrity _before_ shredding original plaintext notes, preventing data loss on process interrupts or disk failures.
 
 ## 🛡️ Security Specifications
 
@@ -34,6 +35,7 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 - **Key Derivation**: PBKDF2-SHA256 with **600,000 iterations**.
 - **Key Safety**: Master keys in memory are created as non-extractable (`extractable: false`), preventing raw key exfiltration by unmanaged code.
 - **Metadata Integrity**: Folders include HMAC signatures (`mac` and `recoveryMac`) to prevent disk-level metadata tampering (e.g., parameter alteration).
+- **Atomic Operations**: Staging writes (`.locked.tmp`) verify ciphertext headers and length on disk before removing original source files.
 - **Implementation**: Native [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API) for maximum speed and security.
 - **Zero-Knowledge**: Your master password and derived keys are never stored on disk.
 
