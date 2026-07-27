@@ -45,7 +45,7 @@
     "@typescript-eslint/eslint-plugin": "^8.60.0",
     "@typescript-eslint/parser": "^8.59.4",
     "@vitest/coverage-v8": "^4.0.18",
-    "builtin-modules": "5.2.0",
+    "builtin-modules": "5.3.0",
     "eslint": "^10.4.0",
     "eslint-plugin-obsidianmd": "^0.3.0",
     "husky": "^9.1.7",
