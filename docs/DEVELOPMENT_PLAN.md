@@ -94,7 +94,8 @@ This document outlines the comprehensive development plan for implementing the "
 - [ ] Implement secure password storage
 - [ ] Add two-factor authentication support
 - [x] Create emergency recovery mechanisms (Recovery Keys)
-- [x] Implement secure key management (Master Key Wrapping)
+- [x] Implement secure key management (Master Key Wrapping & Non-Extractable Session Keys)
+- [x] Add metadata integrity validation (HMAC signatures for mac/recoveryMac)
 
 ### 4.2 Performance Optimizations
 

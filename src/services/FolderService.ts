@@ -639,8 +639,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
 
     const recoveryKey = this.generateRecoveryKey();
-    const masterKey = await this.encryptionService.generateMasterKey();
-    const masterKeyRaw = await this.encryptionService.exportKey(masterKey);
+    const tempExportableKey = await this.encryptionService.generateMasterKey(true);
+    const masterKeyRaw = await this.encryptionService.exportKey(tempExportableKey);
+    const masterKey = await this.encryptionService.importKey(masterKeyRaw, false);
 
     const salt = this.encryptionService.generateSalt();
     const derivedKey = await this.encryptionService.deriveKey(password, salt);
@@ -673,6 +674,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       state: lockImmediately ? 'locking' : 'unlocked',
       lastTransitionAt: Date.now(),
     };
+
+    metadata.mac = await this.computeMetadataMac(metadata, password, false);
+    metadata.recoveryMac = await this.computeMetadataMac(metadata, recoveryKey, true);
 
     await this.writeMetadata(folder.path, metadata);
 
@@ -950,6 +954,18 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     return this.getEncryptedParent(file) !== null;
   }
 
+  private async computeMetadataMac(metadata: FolderMetadata, secret: string, isRecovery = false): Promise<string> {
+    const saltStr = isRecovery ? metadata.recoverySalt : metadata.salt;
+    if (!saltStr) {
+      throw new Error('Metadata is missing salt for MAC computation');
+    }
+    const salt = new Uint8Array(this.base64ToArrayBuffer(saltStr));
+    const hmacKey = await this.encryptionService.deriveHmacKey(secret, salt);
+    const payload = `${metadata.id}:${metadata.version}:${metadata.salt}:${metadata.iterations}:${metadata.wrappedMasterKey}:${metadata.testToken}`;
+    const hmacBuffer = await this.encryptionService.computeHmac(hmacKey, new TextEncoder().encode(payload).buffer);
+    return this.arrayBufferToBase64(hmacBuffer);
+  }
+
   private async getMasterKeyFromSecret(
     metadata: FolderMetadata,
     secret: string,
@@ -963,6 +979,14 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       throw new Error('Metadata is missing required key material.');
     }
 
+    const macToCheck = isRecovery ? metadata.recoveryMac : metadata.mac;
+    if (macToCheck) {
+      const expectedMac = await this.computeMetadataMac(metadata, secret, isRecovery);
+      if (macToCheck !== expectedMac) {
+        throw new Error('Authentication failed: Metadata tampering detected');
+      }
+    }
+
     const salt = new Uint8Array(this.base64ToArrayBuffer(encodedSalt));
     const derivedKey = await this.encryptionService.deriveKey(secret, salt);
 
@@ -972,7 +996,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     const masterKeyRaw = await this.encryptionService.decryptWithKey(wrappedMK, derivedKey, mkIV).catch(() => {
       throw new Error('Authentication failed: Invalid key');
     });
-    const masterKey = await this.encryptionService.importKey(masterKeyRaw);
+    const masterKey = await this.encryptionService.importKey(masterKeyRaw, false);
 
     const tokenData = new Uint8Array(this.base64ToArrayBuffer(metadata.testToken));
     const iv = tokenData.slice(0, 12);
