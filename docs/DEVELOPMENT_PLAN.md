@@ -52,6 +52,8 @@ This document outlines the comprehensive development plan for implementing the "
 
 - [x] Create file reading/writing abstraction layer
 - [x] Implement batch file processing for folders
+- [x] Add atomic staging writes (`.locked.tmp`) with verification before shredding source files
+- [x] Add graceful error isolation for corrupted files during batch decryption
 - [x] Add progress tracking for large folder operations (Implicit in batch)
 - [x] Handle different file types appropriately
 
