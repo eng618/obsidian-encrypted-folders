@@ -53,7 +53,7 @@ describe('EncryptionService', () => {
   });
 
   test('should generate master key and export/import it', async () => {
-    const masterKey = await service.generateMasterKey();
+    const masterKey = await service.generateMasterKey(true);
     const exported = await service.exportKey(masterKey);
     const imported = await service.importKey(exported);
 
@@ -62,5 +62,11 @@ describe('EncryptionService', () => {
     const decrypted = await service.decryptWithKey(subResult.ciphertext, imported, subResult.iv as BufferSource);
 
     expect(new TextDecoder().decode(decrypted)).toBe('Master secret');
+  });
+
+  test('should generate non-extractable master key by default', async () => {
+    const masterKey = await service.generateMasterKey();
+    expect(masterKey.extractable).toBe(false);
+    await expect(service.exportKey(masterKey)).rejects.toThrow();
   });
 });

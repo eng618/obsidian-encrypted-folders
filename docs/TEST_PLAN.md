@@ -95,6 +95,19 @@ Ensure the plugin core surface area is functional.
 3. Lock the folder.
 4. **Verification**: Use a disk hex editor or search for unique strings from the plaintext version in the raw disk sectors (advanced). Alternatively, verify that the file size matches the ciphertext structure, not the original plaintext.
 
+### Non-Extractable Key Verification
+
+1. Unlock an encrypted folder.
+2. In developer tools console, inspect `app.plugins.plugins['obsidian-encrypted-folders'].folderService.unlockedFolders`.
+3. **Verification**: Confirm that for any active `CryptoKey` object, `key.extractable` is `false`. Verify `window.crypto.subtle.exportKey('raw', key)` throws `InvalidAccessException`.
+
+### Metadata Integrity (HMAC Tamper Check)
+
+1. Lock an encrypted folder.
+2. Manually edit `obsidian-folder-meta.json` inside the locked folder (e.g. change `iterations` from 600000 to 1000).
+3. Attempt to unlock the folder using the correct password.
+4. **Verification**: Unlock is rejected with an authentication failure (`Authentication failed: Metadata tampering detected`), protecting against parameter tampering.
+
 ### Session Security
 
 1. Unlock several folders.

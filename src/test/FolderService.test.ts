@@ -776,4 +776,24 @@ describe('FolderService Integration', () => {
     expect(app.vault.getAbstractFileByPath('cancel-encrypt/a.md')).toBeDefined();
     expect(app.vault.getAbstractFileByPath('cancel-encrypt/b.md')).toBeDefined();
   });
+
+  it('should detect metadata tampering via MAC verification failure', async () => {
+    const folder = addFolder('tamper-test');
+    addFile(folder, 'secret.md', 'secret content');
+    await folderService.createEncryptedFolder(folder, 'mypassword', true);
+
+    const metaFile = app.vault.getAbstractFileByPath('tamper-test/obsidian-folder-meta.json') as TFile;
+    expect(metaFile).not.toBeNull();
+
+    const metaBuf = await app.vault.readBinary(metaFile);
+    const metaStr = new TextDecoder().decode(metaBuf);
+    const metadata = JSON.parse(metaStr);
+
+    // Tamper with iterations parameter
+    metadata.iterations = 1000;
+    await app.vault.modifyBinary(metaFile, new TextEncoder().encode(JSON.stringify(metadata, null, 2)).buffer);
+
+    const unlockResult = await folderService.unlockFolder(folder, 'mypassword');
+    expect(unlockResult).toBe(false);
+  });
 });

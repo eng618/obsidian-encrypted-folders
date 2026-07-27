@@ -32,6 +32,8 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 
 - **Algorithm**: AES-256-GCM (Authenticated Encryption with Associated Data).
 - **Key Derivation**: PBKDF2-SHA256 with **600,000 iterations**.
+- **Key Safety**: Master keys in memory are created as non-extractable (`extractable: false`), preventing raw key exfiltration by unmanaged code.
+- **Metadata Integrity**: Folders include HMAC signatures (`mac` and `recoveryMac`) to prevent disk-level metadata tampering (e.g., parameter alteration).
 - **Implementation**: Native [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API) for maximum speed and security.
 - **Zero-Knowledge**: Your master password and derived keys are never stored on disk.
 

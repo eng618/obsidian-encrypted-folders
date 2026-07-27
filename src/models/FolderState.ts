@@ -22,6 +22,8 @@ export interface FolderMetadata {
   wrappedMasterKeyRecovery?: string; // Master key encrypted with recovery-derived key
   recoveryIV?: string; // IV for recovery key wrapping
   expectedLockedFiles?: number; // Number of .locked payload files expected when folder is locked
+  mac?: string; // Base64 encoded HMAC for password metadata verification
+  recoveryMac?: string; // Base64 encoded HMAC for recovery key metadata verification
   state?: FolderLifecycleState;
   lastTransitionAt?: number;
   lastError?: string;
