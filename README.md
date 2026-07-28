@@ -36,6 +36,7 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 - **Key Safety**: Master keys in memory are created as non-extractable (`extractable: false`), preventing raw key exfiltration by unmanaged code.
 - **Metadata Integrity**: Folders include HMAC signatures (`mac` and `recoveryMac`) to prevent disk-level metadata tampering (e.g., parameter alteration).
 - **Atomic Operations**: Staging writes (`.locked.tmp`) verify ciphertext headers and length on disk before removing original source files.
+- **Modular Service Architecture**: Decoupled core services (`MetadataManager`, `AutoLockManager`, `BatchProcessor`, `EncryptionService`) ensure strong separation of concerns, testability, and isolated security boundaries.
 - **Implementation**: Native [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API) for maximum speed and security.
 - **Zero-Knowledge**: Your master password and derived keys are never stored on disk.
 

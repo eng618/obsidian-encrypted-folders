@@ -22,6 +22,7 @@ This document outlines the comprehensive development plan for implementing the "
 
 - [x] Define plugin architecture and data flow
 - [x] Design encryption service interface
+- [x] Decouple monolithic `FolderService` into modular sub-services (`MetadataManager`, `AutoLockManager`, `BatchProcessor`)
 - [x] Plan settings structure and configuration options
 - [x] Design folder state management system (UnlockedFolders map)
 
