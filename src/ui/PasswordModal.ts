@@ -21,6 +21,14 @@ export class PasswordModal extends Modal {
     contentEl.empty();
     new Setting(contentEl).setName(this.title).setHeading();
 
+    if (this.showLockToggle) {
+      const noticeEl = contentEl.createEl('div', {
+        cls: 'metadata-disclosure-notice',
+      });
+      noticeEl.textContent =
+        'ℹ️ Note: Encryption protects your note contents. Note titles, filenames, and directory structures remain unencrypted.';
+    }
+
     const strengthEl = contentEl.createEl('div', {
       text: '',
       cls: 'password-strength password-strength-message',
