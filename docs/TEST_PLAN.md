@@ -197,3 +197,12 @@ Pass when all are true:
 - Console logs containing `[EncryptedFolders]` from both devices.
 - The affected folder's `obsidian-folder-meta.json` contents before and after failure.
 - File listing of that folder (`*.locked`, plaintext files, `README_ENCRYPTED.md`) on both devices.
+
+## 🧪 5. Property-Based & Fuzzing Automated Tests (`PropertyBasedCrypto.test.ts`)
+
+Run using `bun run test`:
+
+- **Property 1 (Cryptographic Invariance)**: Generates random byte arrays (0 to 5 KB) and passwords to verify 100% round-trip payload identity.
+- **Property 2 (Fuzzing Bit Corruption Rejection)**: Flips arbitrary bits in AES-256-GCM ciphertext buffers and verifies decryption throws clean errors without memory crashes.
+- **Property 3 (Fuzzing Truncated Ciphertext Rejection)**: Truncates random numbers of bytes from valid ciphertext payloads and verifies clean rejection.
+- **Property 4 (Path & Structural Generative Stress)**: Generates random deeply nested tree structures with special characters, spaces, and emojis (`🚀`, `🔒`) to verify batch processor stability.

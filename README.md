@@ -19,7 +19,8 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 - **Improved Data Integrity**: Encrypted files use a `.locked` extension, preventing Obsidian's indexer or third-party plugins from corrupting binary data by attempting "UTF-8 repairs."
 - **Informational Readme**: Automatically generates a `README_ENCRYPTED.md` in locked folders with clear instructions on how to unlock your data.
 - **Master Key Architecture**: Uses an encrypted Master Key (unwrapped by your password or a recovery key) for flexible access.
-- **Recovery Keys**: Generate a 32-character recovery key during setup to ensure you never lose access to your data.
+- **Recovery Keys & Safekeeping**: Generate a 32-character recovery key during setup with one-click clipboard copying, `.txt` backup downloads, and mandatory safekeeping confirmation.
+- **Transparent Setup Disclosure**: Displays a pre-encryption notice informing users that file contents are protected while filenames, titles, and directory structures remain unencrypted.
 - **Secure File Shredding**: Automatically overwrites plaintext files with secure random data before re-encrypting to prevent forensic disk recovery.
 - **Auto-Lock Security**: All folders are automatically re-encrypted and locked when the plugin is disabled or Obsidian is closed.
 - **Configurable Safeguards**: Lock unlocked folders automatically when Obsidian goes into the background or after a configurable period of per-folder inactivity, with an optional countdown warning.
