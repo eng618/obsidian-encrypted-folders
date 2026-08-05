@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/eng618/obsidian-encrypted-folders/compare/1.5.0...1.6.0) (2026-08-05)
+
+
+### Features
+
+* Add obsidian-markdown skill with reference documentation and lockfile entry ([5240157](https://github.com/eng618/obsidian-encrypted-folders/commit/52401574c992570f63296eec0e363e94452d7d23))
+
 ## [1.5.0](https://github.com/eng618/obsidian-encrypted-folders/compare/1.4.0...1.5.0) (2026-05-24)
 
 
