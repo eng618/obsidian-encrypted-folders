@@ -215,12 +215,12 @@ export default class EncryptedFoldersPlugin extends Plugin {
     const countdown = this.folderService.getNextIdleLockCountdown();
     if (!countdown) {
       this.idleLockStatusBarEl.textContent = '';
-      this.idleLockStatusBarEl.style.display = 'none';
+      this.idleLockStatusBarEl.hide();
       this.idleLockWarningKeys.clear();
       return;
     }
 
-    this.idleLockStatusBarEl.style.display = '';
+    this.idleLockStatusBarEl.show();
     const folderName = countdown.folderPath.split('/').pop() || countdown.folderPath;
     this.idleLockStatusBarEl.textContent = `Encrypted Folders: locks "${
       folderName

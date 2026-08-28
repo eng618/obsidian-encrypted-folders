@@ -131,6 +131,22 @@ export class Modal {
   this.innerHTML = '';
 };
 
+(HTMLElement.prototype as any).hide = function () {
+  this.style.display = 'none';
+};
+
+(HTMLElement.prototype as any).show = function () {
+  this.style.display = '';
+};
+
+(HTMLElement.prototype as any).toggle = function (show: boolean) {
+  if (show) {
+    this.show();
+  } else {
+    this.hide();
+  }
+};
+
 (HTMLElement.prototype as any).createEl = function (tag: string, options: Record<string, unknown> = {}) {
   const el = document.createElement(tag);
   if (options.text) {

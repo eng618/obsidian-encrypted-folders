@@ -41,9 +41,6 @@ export class PasswordModal extends Modal {
       text: '',
       cls: 'password-error',
     });
-    errorEl.style.color = 'var(--text-error)';
-    errorEl.style.marginBottom = '10px';
-    errorEl.style.fontSize = '0.9em';
 
     if (this.showLockToggle) {
       new Setting(contentEl)

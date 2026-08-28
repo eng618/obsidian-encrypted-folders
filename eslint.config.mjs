@@ -43,6 +43,8 @@ export default [
     files: ['src/test/**/*.ts', 'src/test/**/*.tsx', '**/*.test.ts', '**/*.test.tsx'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
+      'obsidianmd/ui/sentence-case': 'off',
+      'obsidianmd/no-static-styles-assignment': 'off',
     },
   },
 ];
