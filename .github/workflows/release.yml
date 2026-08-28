@@ -8,6 +8,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  id-token: write
+  attestations: write
 
 jobs:
   release-please:
@@ -36,6 +38,15 @@ jobs:
       - name: Build
         if: ${{ steps.release.outputs.release_created }}
         run: bun run build
+
+      - name: Generate artifact attestations
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/main.js
+            manifest.json
+            dist/styles.css
 
       - name: Upload Release Artifacts
         if: ${{ steps.release.outputs.release_created }}

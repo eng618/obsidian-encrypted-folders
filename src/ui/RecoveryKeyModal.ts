@@ -18,7 +18,7 @@ export class RecoveryKeyModal extends Modal {
       cls: 'mod-warning',
     });
 
-    const keyContainer = contentEl.createEl('div', {
+    const keyContainer = contentEl.createDiv({
       cls: 'recovery-key-container',
     });
     keyContainer.setText(this.recoveryKey);

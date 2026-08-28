@@ -175,6 +175,7 @@ export class Setting {
       setButtonText: vi.fn().mockReturnThis(),
       setCta: vi.fn().mockReturnThis(),
       setWarning: vi.fn().mockReturnThis(),
+      setDestructive: vi.fn().mockReturnThis(),
       setTooltip: vi.fn().mockReturnThis(),
       onClick: vi.fn().mockReturnThis(),
     });
@@ -229,6 +230,20 @@ export class PluginSettingTab {
     public app: App,
     public plugin: Plugin,
   ) {}
+
+  getSettingDefinitions(): any[] {
+    return [];
+  }
+
+  getControlValue(key: string): unknown {
+    return undefined;
+  }
+
+  setControlValue(key: string, value: unknown): void | Promise<void> {}
+
+  display(): void {}
+
+  hide(): void {}
 }
 
 export class App {
@@ -260,5 +275,5 @@ export class App {
 }
 
 export function normalizePath(path: string): string {
-  return path.replace(/[\\\/]+/g, '/');
+  return path.replace(/[\\/]+/g, '/');
 }

@@ -27,8 +27,8 @@ export class FileService {
     const normalizedPath = normalizePath(path);
     try {
       return await this.vault.createBinary(normalizedPath, data);
-    } catch (e) {
-      if (e.message?.includes('already exists')) {
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message.includes('already exists')) {
         const existingFile = this.vault.getAbstractFileByPath(normalizedPath);
         if (existingFile instanceof TFile) {
           await this.vault.modifyBinary(existingFile, data);
@@ -38,7 +38,7 @@ export class FileService {
           await this.vault.adapter.writeBinary(normalizedPath, data);
 
           // Attempt to get the file one more time after a short delay
-          await new Promise((r) => setTimeout(r, 100));
+          await new Promise((r) => window.setTimeout(r, 100));
           const retryFile = this.vault.getAbstractFileByPath(normalizedPath);
           if (retryFile instanceof TFile) {
             return retryFile;

@@ -706,7 +706,7 @@ describe('FolderService Integration', () => {
     fileService.readBinary = async (file: TFile) => {
       activeReads += 1;
       maxActiveReads = Math.max(maxActiveReads, activeReads);
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise((resolve) => window.setTimeout(resolve, 10));
       const result = await originalReadBinary(file);
       activeReads -= 1;
       return result;
@@ -735,7 +735,7 @@ describe('FolderService Integration', () => {
     fileService.readBinary = async (file: TFile) => {
       activeReads += 1;
       maxActiveReads = Math.max(maxActiveReads, activeReads);
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise((resolve) => window.setTimeout(resolve, 10));
       const result = await originalReadBinary(file);
       activeReads -= 1;
       return result;

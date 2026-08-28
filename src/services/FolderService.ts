@@ -128,7 +128,7 @@ export class FolderService {
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
   private getMetaPath(folderPath: string): string {
@@ -433,12 +433,22 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     return error;
   }
 
-  private getAbortReason(signal?: AbortSignal): unknown {
+  private getAbortReason(signal?: AbortSignal): Error | null {
     if (!signal?.aborted) {
       return null;
     }
 
-    return signal.reason ?? this.createAbortError();
+    const reason: unknown = signal.reason;
+    if (reason instanceof Error) {
+      return reason;
+    }
+    if (typeof reason === 'string') {
+      const error = new Error(reason);
+      error.name = 'AbortError';
+      return error;
+    }
+
+    return this.createAbortError();
   }
 
   private throwIfAborted(options?: FolderProcessingOptions): void {
@@ -468,7 +478,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     let activeBytes = 0;
     let nextIndex = 0;
     let processedFiles = 0;
-    let firstError: unknown;
+    let firstError: Error | null = null;
 
     this.reportProgress(operation, 'preparing', folder.path, files.length, 0, options);
     this.throwIfAborted(options);
@@ -531,7 +541,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
               results.push(result);
             })
             .catch((error: unknown) => {
-              firstError = firstError ?? error;
+              firstError = firstError ?? (error instanceof Error ? error : new Error(String(error)));
             })
             .finally(() => {
               activeFiles -= 1;
@@ -731,7 +741,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
         return encrypted;
       });
       return results.filter(Boolean).length;
-    } catch (error) {
+    } catch (error: unknown) {
       this.debug('Encryption failed mid-process, attempting rollback', { error, processedFiles });
       await this.rollbackEncryption(processedFiles, key);
       throw error;
@@ -753,7 +763,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
         );
         await this.fileService.writeBinary(file.originalPath, plaintext);
         await this.app.fileManager.trashFile(this.fileService.getFile(file.lockedPath)!);
-      } catch (rollbackError) {
+      } catch (rollbackError: unknown) {
         this.debug('Rollback failed for file', { path: file.originalPath, rollbackError });
       }
     }
@@ -1032,7 +1042,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       await this.transitionMetadataState(folder, metadata, 'unlocked');
       this.debug('folder unlocked', { folder: folder.path, isRecovery });
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
       await this.transitionMetadataState(folder, metadata, 'error', String(error));
       this.debug('unlock error', { folder: folder.path, error });
       return false;
@@ -1093,7 +1103,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
       this.debug('locked folder reprocessed', { folder: folder.path, encryptedAny: results.some(Boolean) });
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
       await this.transitionMetadataState(folder, metadata, 'error', String(error));
       this.debug('locked folder reprocess error', { folder: folder.path, error });
       return false;

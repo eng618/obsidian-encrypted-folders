@@ -1,10 +1,6 @@
 import { recommended } from '@gv-tech/eslint-config';
 import obsidianmd from 'eslint-plugin-obsidianmd';
 
-const obsidianRecommendedRules = Object.fromEntries(
-  Object.entries(obsidianmd.configs.recommended).filter(([ruleName]) => ruleName.startsWith('obsidianmd/')),
-);
-
 /**
  * ESLint configuration for TypeScript projects. Uses @gv-tech/eslint-config for sensible defaults. For more information
  * on configuration options, see: https://github.com/Garcia-Ventures/eslint-config
@@ -30,21 +26,24 @@ export default [
       },
     },
   },
-  {
-    plugins: {
-      obsidianmd,
-    },
-    rules: {
-      ...obsidianRecommendedRules,
-    },
-  },
+  ...obsidianmd.configs.recommended,
   ...recommended,
   {
     files: ['src/test/**/*.ts', 'src/test/**/*.tsx', '**/*.test.ts', '**/*.test.tsx'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-base-to-string': 'off',
+      'obsidianmd/no-nodejs-modules': 'off',
+      'obsidianmd/no-global-this': 'off',
       'obsidianmd/ui/sentence-case': 'off',
       'obsidianmd/no-static-styles-assignment': 'off',
+      'obsidianmd/prefer-create-el': 'off',
+      'obsidianmd/rule-custom-message': 'off',
     },
   },
 ];

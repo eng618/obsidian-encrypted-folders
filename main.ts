@@ -364,10 +364,10 @@ export default class EncryptedFoldersPlugin extends Plugin {
       false,
       this.settings.maxPasswordAttempts,
     );
-    const onClose = modal.onClose.bind(modal);
+    const originalOnClose = modal.onClose.bind(modal) as () => void;
     modal.onClose = () => {
       this.lockedFolderReprocessPrompts.delete(folderToReprocess.path);
-      onClose();
+      originalOnClose();
     };
     modal.open();
   }
@@ -531,7 +531,8 @@ export default class EncryptedFoldersPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const loadedData = (await this.loadData()) as Partial<EncryptedFoldersSettings> | null;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData ?? {});
     this.settings.autoLockWarningSeconds = Number.isFinite(this.settings.autoLockWarningSeconds)
       ? Math.max(0, Math.floor(this.settings.autoLockWarningSeconds))
       : DEFAULT_SETTINGS.autoLockWarningSeconds;

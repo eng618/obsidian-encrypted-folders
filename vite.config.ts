@@ -1,5 +1,5 @@
-import builtins from 'builtin-modules';
 import * as fs from 'fs';
+import { builtinModules } from 'node:module';
 import * as path from 'path';
 import { defineConfig, Plugin } from 'vite';
 
@@ -68,7 +68,7 @@ export default defineConfig({
         '@lezer/common',
         '@lezer/highlight',
         '@lezer/lr',
-        ...builtins,
+        ...builtinModules,
       ],
     },
     outDir: 'dist',

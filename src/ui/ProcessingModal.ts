@@ -22,24 +22,24 @@ export class ProcessingModal extends Modal {
 
     new Setting(contentEl).setName(this.title).setHeading();
 
-    const bodyEl = contentEl.createEl('div', { cls: 'ef-processing-body' });
-    bodyEl.createEl('div', { cls: 'ef-processing-spinner' });
+    const bodyEl = contentEl.createDiv({ cls: 'ef-processing-body' });
+    bodyEl.createDiv({ cls: 'ef-processing-spinner' });
 
-    const textEl = bodyEl.createEl('div', { cls: 'ef-processing-text' });
-    this.statusEl = textEl.createEl('div', {
+    const textEl = bodyEl.createDiv({ cls: 'ef-processing-text' });
+    this.statusEl = textEl.createDiv({
       cls: 'ef-processing-status',
       text: 'Preparing files...',
     });
-    this.detailEl = textEl.createEl('div', {
+    this.detailEl = textEl.createDiv({
       cls: 'ef-processing-detail',
       text: 'Do not quit Obsidian until this finishes.',
     });
 
-    this.progressEl = document.createElement('progress');
-    this.progressEl.className = 'ef-processing-progress';
-    this.progressEl.value = 0;
+    this.progressEl = contentEl.createEl('progress', {
+      cls: 'ef-processing-progress',
+      value: '0',
+    });
     this.progressEl.max = 1;
-    contentEl.appendChild(this.progressEl);
 
     contentEl.createEl('p', {
       cls: 'ef-processing-warning',
@@ -47,15 +47,15 @@ export class ProcessingModal extends Modal {
     });
 
     if (this.onCancel) {
-      this.cancelButtonEl = document.createElement('button');
-      this.cancelButtonEl.className = 'mod-warning ef-processing-cancel';
-      this.cancelButtonEl.textContent = 'Cancel operation';
+      this.cancelButtonEl = contentEl.createEl('button', {
+        cls: 'mod-warning ef-processing-cancel',
+        text: 'Cancel operation',
+      });
       this.cancelButtonEl.addEventListener('click', () => {
         this.cancelButtonEl?.setAttribute('disabled', 'true');
         this.cancelButtonEl!.textContent = 'Cancelling...';
         this.onCancel?.();
       });
-      contentEl.appendChild(this.cancelButtonEl);
     }
   }
 
