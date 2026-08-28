@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/eng618/obsidian-encrypted-folders/compare/1.6.0...1.7.0) (2026-08-28)
+
+
+### Features
+
+* Generate test dataset of files and update testing checklists ([b0182f6](https://github.com/eng618/obsidian-encrypted-folders/commit/b0182f632bfe54c4a8b0a10d5b305c081c6cbe4d))
+
 ## [1.6.0](https://github.com/eng618/obsidian-encrypted-folders/compare/1.5.0...1.6.0) (2026-08-05)
 
 
