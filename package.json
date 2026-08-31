@@ -41,7 +41,7 @@
   "devDependencies": {
     "@eng618/prettier-config": "^2.10.2",
     "@gv-tech/eslint-config": "^0.1.15",
-    "@types/node": "^26.3.0",
+    "@types/node": "^26.4.0",
     "@typescript-eslint/eslint-plugin": "^8.66.0",
     "@typescript-eslint/parser": "^8.65.0",
     "@vitest/coverage-v8": "^4.1.10",
