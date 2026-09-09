@@ -2,7 +2,7 @@ import { App, TFile, TFolder, normalizePath } from 'obsidian';
 import { FolderLifecycleState, FolderMetadata } from '../models/FolderState';
 import { AutoLockManager, AutoLockSettings, IdleLockCountdown } from './AutoLockManager';
 import { BatchProcessor, FolderProcessingOptions } from './BatchProcessor';
-import { EncryptionService } from './EncryptionService';
+import { EncryptionService, KeyDerivationCache } from './EncryptionService';
 import { FileService } from './FileService';
 import { MetadataManager } from './MetadataManager';
 import { bucketCount, type TelemetrySink } from './TelemetryService';
@@ -60,6 +60,15 @@ export class FolderService {
 
   setAutoLockSettings(settings: AutoLockSettings): void {
     this.autoLockManager.setAutoLockSettings(settings);
+  }
+
+  /**
+   * Creates a session-scoped derivation cache for password-retry flows.
+   * The caller owns its lifetime and must clear() it when the prompt
+   * session ends (e.g. modal close) to drop derived key material promptly.
+   */
+  createDerivationCache(): KeyDerivationCache {
+    return new KeyDerivationCache((password, salt) => this.encryptionService.deriveSecretKeys(password, salt));
   }
 
   recordActivityForPath(path: string, timestamp = Date.now()): void {
@@ -330,11 +339,13 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     const masterKey = await this.encryptionService.importKey(masterKeyRaw, false);
 
     const salt = this.encryptionService.generateSalt();
-    const derivedKey = await this.encryptionService.deriveKey(password, salt);
+    // Single PBKDF2 execution split into wrapping + MAC keys (previously two).
+    const { encryptionKey: derivedKey, hmacKey } = await this.encryptionService.deriveSecretKeys(password, salt);
     const wrappedResult = await this.encryptionService.encryptWithKey(masterKeyRaw, derivedKey);
 
     const recoverySalt = this.encryptionService.generateSalt();
-    const recoveryDerivedKey = await this.encryptionService.deriveKey(recoveryKey, recoverySalt);
+    const { encryptionKey: recoveryDerivedKey, hmacKey: recoveryHmacKey } =
+      await this.encryptionService.deriveSecretKeys(recoveryKey, recoverySalt);
     const recoveryWrappedResult = await this.encryptionService.encryptWithKey(masterKeyRaw, recoveryDerivedKey);
 
     const testPhrase = 'OBSIDIAN_ENCRYPTED_VERIFICATION';
@@ -361,8 +372,8 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       lastTransitionAt: Date.now(),
     };
 
-    metadata.mac = await this.metadataManager.computeMetadataMac(metadata, password, false);
-    metadata.recoveryMac = await this.metadataManager.computeMetadataMac(metadata, recoveryKey, true);
+    metadata.mac = await this.metadataManager.computeMetadataMacWithKey(metadata, hmacKey);
+    metadata.recoveryMac = await this.metadataManager.computeMetadataMacWithKey(metadata, recoveryHmacKey);
 
     await this.writeMetadata(folder.path, metadata);
 
@@ -690,7 +701,8 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     metadata: FolderMetadata,
     secret: string,
     isRecovery: boolean,
-  ): Promise<CryptoKey> {
+    cache?: KeyDerivationCache,
+  ): Promise<{ masterKey: CryptoKey; hmacKey: CryptoKey }> {
     const encodedSalt = isRecovery ? metadata.recoverySalt : metadata.salt;
     const wrappedMaster = isRecovery ? metadata.wrappedMasterKeyRecovery : metadata.wrappedMasterKey;
     const wrappedIV = isRecovery ? metadata.recoveryIV : metadata.masterKeyIV;
@@ -699,18 +711,21 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       throw new Error('Metadata is missing required key material.');
     }
 
-    const isValidMac = await this.metadataManager.verifyMetadataMac(metadata, secret, isRecovery);
+    const salt = new Uint8Array(this.metadataManager.base64ToArrayBuffer(encodedSalt));
+    // Single PBKDF2 execution split into wrapping + MAC keys (previously two).
+    const { encryptionKey, hmacKey } = cache
+      ? await cache.deriveSecretKeys(secret, salt)
+      : await this.encryptionService.deriveSecretKeys(secret, salt);
+
+    const isValidMac = await this.metadataManager.verifyMetadataMacWithKey(metadata, hmacKey, isRecovery);
     if (!isValidMac) {
       throw new Error('Authentication failed: Metadata tampering detected');
     }
 
-    const salt = new Uint8Array(this.metadataManager.base64ToArrayBuffer(encodedSalt));
-    const derivedKey = await this.encryptionService.deriveKey(secret, salt);
-
     const wrappedMK = new Uint8Array(this.metadataManager.base64ToArrayBuffer(wrappedMaster));
     const mkIV = new Uint8Array(this.metadataManager.base64ToArrayBuffer(wrappedIV));
 
-    const masterKeyRaw = await this.encryptionService.decryptWithKey(wrappedMK, derivedKey, mkIV).catch(() => {
+    const masterKeyRaw = await this.encryptionService.decryptWithKey(wrappedMK, encryptionKey, mkIV).catch(() => {
       throw new Error('Authentication failed: Invalid key');
     });
     const masterKey = await this.encryptionService.importKey(masterKeyRaw, false);
@@ -728,7 +743,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       throw new Error('Authentication failed: Token mismatch');
     }
 
-    return masterKey;
+    return { masterKey, hmacKey };
   }
 
   /**
@@ -738,7 +753,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
    */
   private async migrateMissingMac(
     metadata: FolderMetadata,
-    secret: string,
+    hmacKey: CryptoKey,
     isRecovery: boolean,
   ): Promise<FolderMetadata> {
     const needsPasswordMac = !isRecovery && !metadata.mac;
@@ -747,7 +762,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       return metadata;
     }
     try {
-      const mac = await this.metadataManager.computeMetadataMac(metadata, secret, isRecovery);
+      const mac = await this.metadataManager.computeMetadataMacWithKey(metadata, hmacKey);
       const migrated = isRecovery ? { ...metadata, recoveryMac: mac } : { ...metadata, mac };
       this.debug('migrated missing metadata MAC', { isRecovery });
       return migrated;
@@ -762,6 +777,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     secret: string,
     isRecovery = false,
     options?: FolderProcessingOptions,
+    derivationCache?: KeyDerivationCache,
   ): Promise<boolean> {
     const refused = (reason: string): false => {
       this.debug(reason, { folder: folder.path });
@@ -808,7 +824,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
       metadata = await this.transitionMetadataState(folder, metadata, 'unlocking');
 
-      const masterKey = await this.getMasterKeyFromSecret(metadata, secret, isRecovery);
+      const { masterKey, hmacKey } = await this.getMasterKeyFromSecret(metadata, secret, isRecovery, derivationCache);
 
       await this.decryptFolderContents(folder, masterKey, options);
 
@@ -819,7 +835,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
       this.unlockedFolders.set(this.toFolderKey(folder.path), masterKey);
       this.recordActivityForPath(folder.path);
-      metadata = await this.migrateMissingMac(metadata, secret, isRecovery);
+      metadata = await this.migrateMissingMac(metadata, hmacKey, isRecovery);
       await this.transitionMetadataState(folder, metadata, 'unlocked');
       this.debug('folder unlocked', { folder: folder.path, isRecovery });
       this.telemetry?.trackEvent('folder_unlocked', {
@@ -843,6 +859,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     secret: string,
     isRecovery = false,
     options?: FolderProcessingOptions,
+    derivationCache?: KeyDerivationCache,
   ): Promise<boolean> {
     if (!this.isEncryptedFolder(folder) || this.isUnlocked(folder)) {
       return false;
@@ -876,7 +893,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
 
     try {
-      const masterKey = await this.getMasterKeyFromSecret(metadata, secret, isRecovery);
+      const { masterKey } = await this.getMasterKeyFromSecret(metadata, secret, isRecovery, derivationCache);
       const results = await this.batchProcessor.processFilesWithLimits(
         folder,
         'encrypt',

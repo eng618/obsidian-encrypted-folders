@@ -1,4 +1,4 @@
-import { EncryptionService } from '../services/EncryptionService';
+import { EncryptionService, KeyDerivationCache } from '../services/EncryptionService';
 
 describe('EncryptionService', () => {
   let service: EncryptionService;
@@ -68,5 +68,44 @@ describe('EncryptionService', () => {
     const masterKey = await service.generateMasterKey();
     expect(masterKey.extractable).toBe(false);
     await expect(service.exportKey(masterKey)).rejects.toThrow();
+  });
+
+  test('deriveSecretKeys splits one KDF into independent encryption and MAC keys', async () => {
+    const salt = service.generateSalt();
+    const { encryptionKey, hmacKey } = await service.deriveSecretKeys('test-password', salt);
+
+    const data = new TextEncoder().encode('Split secret').buffer;
+    const encrypted = await service.encryptWithKey(data, encryptionKey);
+    const decrypted = await service.decryptWithKey(encrypted.ciphertext, encryptionKey, encrypted.iv);
+    expect(new TextDecoder().decode(decrypted)).toBe('Split secret');
+
+    const payload = new TextEncoder().encode('payload').buffer;
+    const mac = await service.computeHmac(hmacKey, payload);
+    expect(await service.verifyHmac(hmacKey, mac, payload)).toBe(true);
+
+    // Keys are domain-separated: cross-use must fail.
+    await expect(service.computeHmac(encryptionKey, payload)).rejects.toThrow();
+    await expect(service.encryptWithKey(data, hmacKey)).rejects.toThrow();
+  });
+
+  test('KeyDerivationCache reuses derivations within a session and clears on demand', async () => {
+    let deriveCalls = 0;
+    const cache = new KeyDerivationCache(async (password, salt) => {
+      deriveCalls += 1;
+      return service.deriveSecretKeys(password, salt);
+    });
+    const salt = service.generateSalt();
+
+    const first = await cache.deriveSecretKeys('same-password', salt);
+    const second = await cache.deriveSecretKeys('same-password', salt);
+    expect(second).toBe(first);
+    expect(deriveCalls).toBe(1);
+
+    await cache.deriveSecretKeys('other-password', salt);
+    expect(deriveCalls).toBe(2);
+
+    cache.clear();
+    await cache.deriveSecretKeys('same-password', salt);
+    expect(deriveCalls).toBe(3);
   });
 });

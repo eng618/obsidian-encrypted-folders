@@ -56,12 +56,13 @@ export class LockedFolderReprocessCoordinator {
     this.prompts.add(folderToReprocess.path);
     new Notice(`New unencrypted files were added to locked folder "${folderToReprocess.path}".`);
 
+    const derivationCache = this.folderService.createDerivationCache();
     const modal = new PasswordModal(
       this.app,
       'Encrypt new files',
       async (password) => {
         const success = await runWithProcessingModal(this.app, 'Encrypting new files', (options) =>
-          this.folderService.reprocessLockedFolder(folderToReprocess, password, false, options),
+          this.folderService.reprocessLockedFolder(folderToReprocess, password, false, options, derivationCache),
         );
         if (success) {
           new Notice('New files encrypted. Folder remains locked.');
@@ -76,6 +77,7 @@ export class LockedFolderReprocessCoordinator {
     const onClose = modal.onClose.bind(modal) as () => void;
     modal.onClose = () => {
       this.prompts.delete(folderToReprocess.path);
+      derivationCache.clear();
       onClose();
     };
     modal.open();

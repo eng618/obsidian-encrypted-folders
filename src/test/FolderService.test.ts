@@ -112,6 +112,54 @@ describe('FolderService Integration', () => {
     }
   });
 
+  test('should pay one PBKDF2 per secret on create and unlock (split KDF)', async () => {
+    const folder = addFolder('kdf-count');
+    addFile(folder, 'note.md', 'kdf content');
+
+    const splitSpy = vi.spyOn(encryptionService, 'deriveSecretKeys');
+    const legacyKeySpy = vi.spyOn(encryptionService, 'deriveKey');
+    const legacyHmacSpy = vi.spyOn(encryptionService, 'deriveHmacKey');
+
+    await folderService.createEncryptedFolder(folder, 'password123', true);
+    // One split derivation for the password, one for the recovery key —
+    // no legacy double-KDF derivations.
+    expect(splitSpy).toHaveBeenCalledTimes(2);
+    expect(legacyKeySpy).not.toHaveBeenCalled();
+    expect(legacyHmacSpy).not.toHaveBeenCalled();
+
+    splitSpy.mockClear();
+    const unlocked = await folderService.unlockFolder(folder, 'password123');
+    expect(unlocked).toBe(true);
+    // Single derivation covers both MAC verification and unwrapping.
+    expect(splitSpy).toHaveBeenCalledTimes(1);
+
+    splitSpy.mockRestore();
+    legacyKeySpy.mockRestore();
+    legacyHmacSpy.mockRestore();
+  });
+
+  test('should reuse derived keys across password retries within a cache session', async () => {
+    const folder = addFolder('kdf-cache');
+    addFile(folder, 'note.md', 'cache content');
+    await folderService.createEncryptedFolder(folder, 'password123', true);
+
+    const splitSpy = vi.spyOn(encryptionService, 'deriveSecretKeys');
+    const cache = folderService.createDerivationCache();
+
+    // Wrong password twice, then correct: two distinct secrets → two KDFs.
+    expect(await folderService.unlockFolder(folder, 'wrong', false, undefined, cache)).toBe(false);
+    expect(await folderService.unlockFolder(folder, 'wrong', false, undefined, cache)).toBe(false);
+    expect(splitSpy).toHaveBeenCalledTimes(1);
+
+    // Re-lock via a fresh folder state is unnecessary here; correct password
+    // derives once more then succeeds.
+    expect(await folderService.unlockFolder(folder, 'password123', false, undefined, cache)).toBe(true);
+    expect(splitSpy).toHaveBeenCalledTimes(2);
+
+    cache.clear();
+    splitSpy.mockRestore();
+  });
+
   test('should unlock using recovery key', async () => {
     const folder = new TFolder();
     folder.path = 'secret2';

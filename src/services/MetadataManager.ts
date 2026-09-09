@@ -153,6 +153,15 @@ export class MetadataManager {
     }
     const salt = new Uint8Array(this.base64ToArrayBuffer(saltStr));
     const hmacKey = await this.encryptionService.deriveHmacKey(secret, salt);
+    return this.computeMetadataMacWithKey(metadata, hmacKey);
+  }
+
+  /**
+   * MAC computation from an already-derived HMAC key (see
+   * EncryptionService.deriveSecretKeys). Avoids re-paying PBKDF2 when the
+   * caller already derived keys for unwrapping.
+   */
+  async computeMetadataMacWithKey(metadata: FolderMetadata, hmacKey: CryptoKey): Promise<string> {
     const payload = `${metadata.id}:${metadata.version}:${metadata.salt}:${metadata.iterations}:${metadata.wrappedMasterKey}:${metadata.testToken}`;
     const hmacBuffer = await this.encryptionService.computeHmac(hmacKey, new TextEncoder().encode(payload).buffer);
     return this.arrayBufferToBase64(hmacBuffer);
@@ -172,6 +181,23 @@ export class MetadataManager {
       return true;
     }
     const expectedMac = await this.computeMetadataMac(metadata, secret, isRecovery);
+    return macsEqual(macToCheck, expectedMac);
+  }
+
+  /**
+   * MAC verification from an already-derived HMAC key. Same legacy
+   * fallback semantics as verifyMetadataMac.
+   */
+  async verifyMetadataMacWithKey(metadata: FolderMetadata, hmacKey: CryptoKey, isRecovery = false): Promise<boolean> {
+    const macToCheck = isRecovery ? metadata.recoveryMac : metadata.mac;
+    if (!macToCheck) {
+      this.debugLogger?.('metadata missing MAC, falling back to legacy verification', {
+        folderId: metadata.id,
+        isRecovery,
+      });
+      return true;
+    }
+    const expectedMac = await this.computeMetadataMacWithKey(metadata, hmacKey);
     return macsEqual(macToCheck, expectedMac);
   }
 

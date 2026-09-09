@@ -80,13 +80,14 @@ function registerEncryptedMenu(menu: Menu, folder: TFolder, deps: FolderMenuDeps
         .setTitle('Unlock folder')
         .setIcon('unlock')
         .onClick(() => {
-          new PasswordModal(
+          const derivationCache = folderService.createDerivationCache();
+          const modal = new PasswordModal(
             app,
             'Unlock folder',
             async (password) => {
               try {
                 return await runWithProcessingModal(app, 'Unlocking folder', (options) =>
-                  folderService.unlockFolder(folder, password, false, options),
+                  folderService.unlockFolder(folder, password, false, options, derivationCache),
                 );
               } catch (e: unknown) {
                 folderService.debug('Unlock folder failed', e);
@@ -95,7 +96,13 @@ function registerEncryptedMenu(menu: Menu, folder: TFolder, deps: FolderMenuDeps
             },
             false,
             deps.getSettings().maxPasswordAttempts,
-          ).open();
+          );
+          const onClose = modal.onClose.bind(modal) as () => void;
+          modal.onClose = () => {
+            derivationCache.clear();
+            onClose();
+          };
+          modal.open();
         });
     });
 
@@ -104,13 +111,14 @@ function registerEncryptedMenu(menu: Menu, folder: TFolder, deps: FolderMenuDeps
         .setTitle('Unlock with recovery key')
         .setIcon('key')
         .onClick(() => {
-          new PasswordModal(
+          const derivationCache = folderService.createDerivationCache();
+          const modal = new PasswordModal(
             app,
             'Enter recovery key',
             async (recoveryKey) => {
               try {
                 return await runWithProcessingModal(app, 'Unlocking folder', (options) =>
-                  folderService.unlockFolder(folder, recoveryKey, true, options),
+                  folderService.unlockFolder(folder, recoveryKey, true, options, derivationCache),
                 );
               } catch (e: unknown) {
                 folderService.debug('Unlock with recovery key failed', e);
@@ -119,7 +127,13 @@ function registerEncryptedMenu(menu: Menu, folder: TFolder, deps: FolderMenuDeps
             },
             false,
             deps.getSettings().maxPasswordAttempts,
-          ).open();
+          );
+          const onClose = modal.onClose.bind(modal) as () => void;
+          modal.onClose = () => {
+            derivationCache.clear();
+            onClose();
+          };
+          modal.open();
         });
     });
   }
