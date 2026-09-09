@@ -2,7 +2,12 @@ import { App, Notice, PluginSettingTab, Setting, SettingDefinitionItem } from 'o
 import type EncryptedFoldersPlugin from '../../main';
 
 type SettingsKey =
-  'autoLockOnBackground' | 'autoLockIdleMinutes' | 'autoLockWarningSeconds' | 'debugLogging' | 'maxPasswordAttempts';
+  | 'autoLockOnBackground'
+  | 'autoLockIdleMinutes'
+  | 'autoLockWarningSeconds'
+  | 'debugLogging'
+  | 'maxPasswordAttempts'
+  | 'telemetryEnabled';
 
 export class EncryptedFoldersSettingTab extends PluginSettingTab {
   plugin: EncryptedFoldersPlugin;
@@ -95,6 +100,15 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
           void this.runEncryptedFolderScan();
         },
       },
+      {
+        name: 'Anonymous usage telemetry',
+        desc: 'Send anonymous usage events (encrypt, unlock, lock) to help improve the plugin. No vault paths, filenames, passwords, or file contents are ever collected. See the README privacy section for details.',
+        control: {
+          type: 'toggle',
+          key: 'telemetryEnabled',
+          defaultValue: true,
+        },
+      },
     ];
   }
 
@@ -119,6 +133,9 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
         break;
       case 'maxPasswordAttempts':
         this.plugin.settings.maxPasswordAttempts = this.clampInt(value, 1, 5);
+        break;
+      case 'telemetryEnabled':
+        this.plugin.settings.telemetryEnabled = value === true;
         break;
     }
     await this.plugin.saveSettings();

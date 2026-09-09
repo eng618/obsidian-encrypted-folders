@@ -1,12 +1,13 @@
-import { Notice, Plugin } from 'obsidian';
+import { Notice, Platform, Plugin } from 'obsidian';
 import { registerEventSubscriptions } from './src/events/EventSubscriptions';
 import type { EncryptedFoldersSettings } from './src/models/Settings';
-import { DEFAULT_SETTINGS, sanitizeSettings } from './src/models/Settings';
+import { DEFAULT_SETTINGS, ensureTelemetryId, sanitizeSettings } from './src/models/Settings';
 import { EncryptionService } from './src/services/EncryptionService';
 import { FileService } from './src/services/FileService';
 import type { FolderProcessingOptions } from './src/services/FolderService';
 import { FolderService } from './src/services/FolderService';
 import { LockedFolderReprocessCoordinator } from './src/services/LockedFolderReprocessCoordinator';
+import { TelemetryService } from './src/services/TelemetryService';
 import { updateExplorerIndicators } from './src/ui/ExplorerIndicators';
 import { IdleLockController } from './src/ui/IdleLockController';
 import { runWithProcessingModal } from './src/ui/ProcessingRunner';
@@ -21,13 +22,30 @@ export default class EncryptedFoldersPlugin extends Plugin {
   folderService: FolderService;
   reprocessCoordinator: LockedFolderReprocessCoordinator;
   idleLockController: IdleLockController;
+  telemetryService: TelemetryService;
 
   async onload() {
     await this.loadSettings();
 
+    if (!this.settings.telemetryId) {
+      ensureTelemetryId(this.settings);
+      await this.saveData(this.settings);
+    }
+
+    this.telemetryService = new TelemetryService(
+      () => this.settings.telemetryEnabled,
+      () => ensureTelemetryId(this.settings),
+      () => ({
+        plugin_version: this.manifest.version,
+        platform: Platform.isMobile ? 'mobile' : 'desktop',
+      }),
+    );
+
     this.encryptionService = new EncryptionService();
     this.fileService = new FileService(this.app.vault, (file) => this.app.fileManager.trashFile(file));
-    this.folderService = new FolderService(this.encryptionService, this.fileService, this.app);
+    this.folderService = new FolderService(this.encryptionService, this.fileService, this.app, {
+      telemetry: this.telemetryService,
+    });
     this.folderService.setDebugLogging(this.settings.debugLogging);
     this.folderService.setAutoLockSettings({
       idleMinutes: this.settings.autoLockIdleMinutes,
@@ -56,6 +74,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
     this.idleLockController.startInterval((id) => this.registerInterval(id));
 
     this.addSettingTab(new EncryptedFoldersSettingTab(this.app, this));
+
+    this.telemetryService.trackEvent('plugin_loaded', {});
+    await this.maybeShowTelemetryNotice();
   }
 
   async handleVisibilityChange(isHidden: boolean): Promise<void> {
@@ -99,9 +120,22 @@ export default class EncryptedFoldersPlugin extends Plugin {
     return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
   }
 
+  private async maybeShowTelemetryNotice(): Promise<void> {
+    if (this.settings.telemetryNoticeSeen) {
+      return;
+    }
+    this.settings.telemetryNoticeSeen = true;
+    await this.saveData(this.settings);
+    new Notice(
+      'Anonymous usage statistics are collected to improve this plugin. No vault paths, filenames, or contents are ever collected. You can opt out in the plugin settings.',
+      12000,
+    );
+  }
+
   onunload() {
+    this.telemetryService?.trackEvent('plugin_unloaded', {});
     this.reprocessCoordinator?.dispose();
-    void this.folderService.lockAllFolders();
+    void this.folderService.lockAllFolders(undefined, 'unload');
   }
 
   async loadSettings() {

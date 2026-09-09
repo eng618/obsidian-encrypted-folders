@@ -4,6 +4,9 @@ export interface EncryptedFoldersSettings {
   autoLockWarningSeconds: number;
   debugLogging: boolean;
   maxPasswordAttempts: number;
+  telemetryEnabled: boolean;
+  telemetryId?: string;
+  telemetryNoticeSeen?: boolean;
 }
 
 export const DEFAULT_SETTINGS: EncryptedFoldersSettings = {
@@ -12,6 +15,7 @@ export const DEFAULT_SETTINGS: EncryptedFoldersSettings = {
   autoLockWarningSeconds: 60,
   debugLogging: false,
   maxPasswordAttempts: 5,
+  telemetryEnabled: true,
 };
 
 export function sanitizeSettings(
@@ -27,5 +31,18 @@ export function sanitizeSettings(
   settings.maxPasswordAttempts = Number.isFinite(settings.maxPasswordAttempts)
     ? Math.max(1, Math.floor(settings.maxPasswordAttempts))
     : DEFAULT_SETTINGS.maxPasswordAttempts;
+  if (typeof settings.telemetryEnabled !== 'boolean') {
+    settings.telemetryEnabled = DEFAULT_SETTINGS.telemetryEnabled;
+  }
+  if (settings.telemetryId !== undefined && typeof settings.telemetryId !== 'string') {
+    settings.telemetryId = undefined;
+  }
   return settings;
+}
+
+export function ensureTelemetryId(settings: EncryptedFoldersSettings): string {
+  if (!settings.telemetryId) {
+    settings.telemetryId = window.crypto.randomUUID();
+  }
+  return settings.telemetryId;
 }

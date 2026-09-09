@@ -5,6 +5,7 @@ import { BatchProcessor, FolderProcessingOptions } from './BatchProcessor';
 import { EncryptionService } from './EncryptionService';
 import { FileService } from './FileService';
 import { MetadataManager } from './MetadataManager';
+import { bucketCount, type TelemetrySink } from './TelemetryService';
 
 export type { AutoLockSettings, IdleLockCountdown } from './AutoLockManager';
 export type {
@@ -18,7 +19,10 @@ export interface FolderServiceDeps {
   metadataManager?: MetadataManager;
   autoLockManager?: AutoLockManager;
   batchProcessor?: BatchProcessor;
+  telemetry?: TelemetrySink;
 }
+
+export type FolderLockVia = 'manual' | 'background' | 'idle' | 'unload';
 
 export class FolderService {
   private unlockedFolders: Map<string, CryptoKey> = new Map();
@@ -34,6 +38,7 @@ export class FolderService {
   private metadataManager: MetadataManager;
   private autoLockManager: AutoLockManager;
   private batchProcessor: BatchProcessor;
+  private telemetry: TelemetrySink | undefined;
 
   constructor(
     private encryptionService: EncryptionService,
@@ -46,6 +51,7 @@ export class FolderService {
       new MetadataManager(this.encryptionService, this.fileService, (msg, data) => this.debug(msg, data));
     this.autoLockManager = deps.autoLockManager ?? new AutoLockManager();
     this.batchProcessor = deps.batchProcessor ?? new BatchProcessor([this.META_FILE_NAME, this.README_FILE_NAME]);
+    this.telemetry = deps.telemetry;
   }
 
   setDebugLogging(enabled: boolean): void {
@@ -173,14 +179,18 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     return this.autoLockManager.getNextIdleLockCountdown(this.getUnlockedFolderPaths(), timestamp);
   }
 
-  private async lockTrackedFolders(folderPaths?: string[], options?: FolderProcessingOptions): Promise<boolean> {
+  private async lockTrackedFolders(
+    folderPaths?: string[],
+    options?: FolderProcessingOptions,
+    via: FolderLockVia = 'manual',
+  ): Promise<boolean> {
     let lockedAny = false;
     const paths = folderPaths ?? Array.from(this.unlockedFolders.keys());
 
     for (const path of paths) {
       const folder = this.fileService.getAbstractFileByPath(path);
       if (folder instanceof TFolder) {
-        await this.lockFolder(folder, options);
+        await this.lockFolder(folder, options, via);
         lockedAny = true;
         continue;
       }
@@ -201,9 +211,13 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     this.autoLockInProgress = true;
 
     try {
-      const locked = await this.lockTrackedFolders(paths);
+      const locked = await this.lockTrackedFolders(paths, undefined, reason);
       if (locked) {
         this.debug('folders auto-locked', { reason });
+        this.telemetry?.trackEvent('auto_lock_triggered', {
+          via: reason,
+          folder_count_bucket: bucketCount(paths.length),
+        });
       }
       return locked;
     } finally {
@@ -376,6 +390,13 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
     this.encryptedFolders.add(this.toFolderKey(folder.path));
     this.debug('encrypted folder created', { folder: folder.path, state: metadata.state });
+    this.telemetry?.trackEvent('folder_encrypted', {
+      lock_immediately: lockImmediately,
+      file_count_bucket:
+        lockImmediately && typeof metadata.expectedLockedFiles === 'number'
+          ? bucketCount(metadata.expectedLockedFiles)
+          : 'pending',
+    });
     return recoveryKey;
   }
 
@@ -742,16 +763,26 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     isRecovery = false,
     options?: FolderProcessingOptions,
   ): Promise<boolean> {
+    const refused = (reason: string): false => {
+      this.debug(reason, { folder: folder.path });
+      this.telemetry?.trackEvent('folder_unlocked', {
+        via: isRecovery ? 'recovery' : 'password',
+        success: false,
+      });
+      return false;
+    };
+
     let metadata;
     try {
       metadata = await this.readMetadata(folder);
     } catch (error: unknown) {
       // Corrupt/unsupported metadata fails closed: refuse to unlock.
       this.debug('unlock refused: unreadable metadata', { folder: folder.path, error: String(error) });
+      this.telemetry?.trackEvent('error', { area: 'metadata' });
       return false;
     }
     if (!metadata) {
-      return false;
+      return refused('unlock refused: missing metadata');
     }
 
     await this.reconcileFolderState(folder);
@@ -759,10 +790,11 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       metadata = await this.readMetadata(folder);
     } catch (error: unknown) {
       this.debug('unlock refused: unreadable metadata', { folder: folder.path, error: String(error) });
+      this.telemetry?.trackEvent('error', { area: 'metadata' });
       return false;
     }
     if (!metadata) {
-      return false;
+      return refused('unlock refused: missing metadata');
     }
 
     try {
@@ -790,10 +822,18 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       metadata = await this.migrateMissingMac(metadata, secret, isRecovery);
       await this.transitionMetadataState(folder, metadata, 'unlocked');
       this.debug('folder unlocked', { folder: folder.path, isRecovery });
+      this.telemetry?.trackEvent('folder_unlocked', {
+        via: isRecovery ? 'recovery' : 'password',
+        success: true,
+      });
       return true;
     } catch (error: unknown) {
       await this.transitionMetadataState(folder, metadata, 'error', String(error));
       this.debug('unlock error', { folder: folder.path, error });
+      this.telemetry?.trackEvent('folder_unlocked', {
+        via: isRecovery ? 'recovery' : 'password',
+        success: false,
+      });
       return false;
     }
   }
@@ -876,7 +916,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
   }
 
-  async lockFolder(folder: TFolder, options?: FolderProcessingOptions): Promise<void> {
+  async lockFolder(folder: TFolder, options?: FolderProcessingOptions, via: FolderLockVia = 'manual'): Promise<void> {
     const folderKey = this.toFolderKey(folder.path);
     const key = this.unlockedFolders.get(folderKey);
     if (!key) {
@@ -904,14 +944,18 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       this.autoLockManager.removePath(folderKey);
       await this.transitionMetadataState(folder, metadata, 'locked');
       this.debug('folder locked', { folder: folder.path });
+      this.telemetry?.trackEvent('folder_locked', {
+        via,
+        file_count_bucket: bucketCount(encryptedCount),
+      });
     } catch (error: unknown) {
       await this.transitionMetadataState(folder, metadata, 'error', String(error));
       throw error instanceof Error ? error : new Error(String(error));
     }
   }
 
-  async lockAllFolders(options?: FolderProcessingOptions): Promise<void> {
-    await this.lockTrackedFolders(undefined, options);
+  async lockAllFolders(options?: FolderProcessingOptions, via: FolderLockVia = 'manual'): Promise<void> {
+    await this.lockTrackedFolders(undefined, options, via);
     this.unlockedFolders.clear();
   }
 
@@ -972,6 +1016,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     this.unlockedFolders.delete(this.toFolderKey(folder.path));
     this.autoLockManager.removePath(this.toFolderKey(folder.path));
     this.encryptedFolders.delete(this.toFolderKey(folder.path));
+    this.telemetry?.trackEvent('encryption_removed', {});
 
     return true;
   }

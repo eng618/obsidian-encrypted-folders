@@ -86,6 +86,22 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 - If a sync operation lands while a folder is transitioning, metadata state (`locking` / `unlocking`) is reconciled on the receiving device.
 - Background locking protects every unlocked folder at once, and per-folder inactivity locking reduces the chance that one forgotten unlocked folder stays open long enough to trigger cross-device sync conflicts.
 
+## 🔒 Privacy & Telemetry
+
+This plugin collects **anonymous usage telemetry** (via a self-hosted OpenPanel instance) to help improve the plugin. Telemetry is **enabled by default** but can be opted out of at any time in **Settings → Encrypted Folders → Anonymous usage telemetry**.
+
+What is collected:
+
+- Feature usage events (folder encrypted, unlocked, locked, auto-lock triggers, encryption removed) with coarse metadata such as file-count buckets (`1-10`, `11-100`, `100+`), plugin version, and platform (`desktop`/`mobile`).
+- A random anonymous ID generated per vault. No account, email, or identifying information is collected.
+
+What is **never** collected:
+
+- Vault paths, folder names, filenames, file contents, passwords, recovery keys, or encryption keys.
+- Anything that could identify you or the contents of your vault.
+
+Network requests go only to the analytics host for event ingestion. No telemetry event ever blocks or affects encryption behavior — all reporting is best-effort and fire-and-forget.
+
 ## 🛠️ Development
 
 ### Prerequisites
