@@ -25,6 +25,13 @@ export interface FolderServiceDeps {
 export type FolderLockVia = 'manual' | 'background' | 'idle' | 'unload';
 
 export class FolderService {
+  /**
+   * In-memory master keys for unlocked folders. Keys are non-extractable
+   * (see EncryptionService.importKey with extractable:false), so dropping
+   * the Map entry purges the only reachable handle — there is intentionally
+   * no accessor exposing raw key material outside this service. Entries are
+   * removed on lock, removeEncryption, updatePath/removePath, and lockAll.
+   */
   private unlockedFolders: Map<string, CryptoKey> = new Map();
   private encryptedFolders: Set<string> = new Set();
   private syncDebounceTimer: number | null = null;
@@ -482,7 +489,11 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
   }
 
-  async decryptFolderContents(folder: TFolder, key: CryptoKey, options?: FolderProcessingOptions): Promise<void> {
+  async decryptFolderContents(
+    folder: TFolder,
+    key: CryptoKey,
+    options?: FolderProcessingOptions,
+  ): Promise<{ path: string; error: unknown }[]> {
     const files = this.batchProcessor.collectProcessableFiles(folder, 'decrypt');
     const errors: { path: string; error: unknown }[] = [];
 
@@ -507,6 +518,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
           : new Error(`Failed to decrypt all ${files.length} files in folder.`);
       }
     }
+    return errors;
   }
 
   async encryptFile(file: TFile, key: CryptoKey): Promise<boolean> {
@@ -523,21 +535,26 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     const tmpFile = await this.fileService.writeBinary(tmpPath, combined);
     const stagedData = await this.fileService.readBinary(tmpFile);
     if (!this.hasMagic(stagedData) || stagedData.byteLength !== combined.byteLength) {
-      const currentTmp = this.fileService.getFile(tmpPath);
-      if (currentTmp) {
-        await this.fileService.deleteFile(currentTmp);
-      }
+      await this.deleteFileIfExists(tmpPath);
       throw new Error(`Staging write integrity check failed for file ${file.path}`);
     }
 
-    await this.fileService.writeBinary(finalPath, combined);
-    const createdTmp = this.fileService.getFile(tmpPath);
-    if (createdTmp) {
-      await this.fileService.deleteFile(createdTmp);
+    try {
+      await this.fileService.writeBinary(finalPath, combined);
+    } finally {
+      // Staging file must never leak, including when the final write throws.
+      await this.deleteFileIfExists(tmpPath);
     }
 
     await this.fileService.shredFile(file);
     return true;
+  }
+
+  private async deleteFileIfExists(path: string): Promise<void> {
+    const existing = this.fileService.getFile(path);
+    if (existing) {
+      await this.fileService.deleteFile(existing);
+    }
   }
 
   async decryptFile(file: TFile, key: CryptoKey): Promise<void> {
@@ -546,8 +563,10 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       return;
     }
 
-    const { iv, ciphertext } = this.splitMagicBuffer(data);
+    let iv: Uint8Array | undefined;
+    let ciphertext: Uint8Array | undefined;
     try {
+      ({ iv, ciphertext } = this.splitMagicBuffer(data));
       const plaintext = await this.encryptionService.decryptWithKey(
         this.toBufferView(ciphertext),
         key,
@@ -569,8 +588,8 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
         `Failed to decrypt file: ${file.path}\n` +
         `  Error: ${err.name} - ${err.message}\n` +
         `  File Size: ${data.byteLength}\n` +
-        `  IV Length: ${iv.byteLength}\n` +
-        `  Ciphertext Length: ${ciphertext.byteLength}`;
+        `  IV Length: ${iv?.byteLength ?? 0}\n` +
+        `  Ciphertext Length: ${ciphertext?.byteLength ?? 0}`;
       this.debug(errorMsg);
       throw new Error(errorMsg);
     }
@@ -603,6 +622,12 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   private splitMagicBuffer(data: ArrayBuffer): { iv: Uint8Array; ciphertext: Uint8Array } {
     const headerOffset = this.MAGIC_BYTES.length;
     const ivOffset = headerOffset + 12;
+
+    if (data.byteLength < ivOffset) {
+      throw new Error(
+        `Encrypted file is truncated or corrupt: expected at least ${ivOffset} bytes, found ${data.byteLength}.`,
+      );
+    }
 
     const fullView = new Uint8Array(data);
     const iv = fullView.slice(headerOffset, ivOffset);
@@ -826,7 +851,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
       const { masterKey, hmacKey } = await this.getMasterKeyFromSecret(metadata, secret, isRecovery, derivationCache);
 
-      await this.decryptFolderContents(folder, masterKey, options);
+      const decryptErrors = await this.decryptFolderContents(folder, masterKey, options);
 
       const readmeFile = this.fileService.getFile(this.getReadmePath(folder.path));
       if (readmeFile) {
@@ -836,7 +861,15 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       this.unlockedFolders.set(this.toFolderKey(folder.path), masterKey);
       this.recordActivityForPath(folder.path);
       metadata = await this.migrateMissingMac(metadata, hmacKey, isRecovery);
-      await this.transitionMetadataState(folder, metadata, 'unlocked');
+      // Partial failures leave restorable files behind as .locked; record
+      // them on the unlocked state instead of silently reporting success.
+      const partialError =
+        decryptErrors.length > 0
+          ? `Partial decrypt: ${decryptErrors.length} file(s) could not be restored and remain locked: ${decryptErrors
+              .map((e) => e.path)
+              .join(', ')}`
+          : undefined;
+      await this.transitionMetadataState(folder, metadata, 'unlocked', partialError);
       this.debug('folder unlocked', { folder: folder.path, isRecovery });
       this.telemetry?.trackEvent('folder_unlocked', {
         via: isRecovery ? 'recovery' : 'password',
@@ -1003,10 +1036,6 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     this.unlockedFolders.delete(key);
     this.autoLockManager.removePath(key);
     this.encryptedFolders.delete(key);
-  }
-
-  getUnlockedKey(folder: TFolder): CryptoKey | undefined {
-    return this.unlockedFolders.get(this.toFolderKey(folder.path));
   }
 
   async removeEncryption(folder: TFolder, password?: string, isRecovery = false): Promise<boolean> {

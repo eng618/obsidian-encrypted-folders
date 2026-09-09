@@ -880,11 +880,67 @@ describe('FolderService Integration', () => {
     const corruptLocked = app.vault.getAbstractFileByPath('partial-corrupt/corrupt.md.locked') as TFile;
     await app.vault.modifyBinary(corruptLocked, new TextEncoder().encode('ENC!invalid_ciphertext_bytes').buffer);
 
-    // Decrypt folder - should decrypt good.md successfully
-    await folderService.decryptFolderContents(folder, key);
+    // Decrypt folder - should decrypt good.md successfully and report the failure
+    const errors = await folderService.decryptFolderContents(folder, key);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].path).toBe('partial-corrupt/corrupt.md.locked');
 
     expect(app.vault.getAbstractFileByPath('partial-corrupt/good.md')).not.toBeNull();
     expect(app.vault.getAbstractFileByPath('partial-corrupt/good.md.locked')).toBeNull();
     expect(app.vault.getAbstractFileByPath('partial-corrupt/corrupt.md.locked')).not.toBeNull();
+  });
+
+  it('should clean up staging files when the final write fails', async () => {
+    const folder = addFolder('final-write-fail');
+    const file = addFile(folder, 'note.md', 'important plaintext note');
+    const key = await encryptionService.generateMasterKey();
+
+    const originalWriteBinary = fileService.writeBinary.bind(fileService);
+    fileService.writeBinary = async (path: string, data: ArrayBuffer) => {
+      if (path.endsWith('.locked') && !path.endsWith('.locked.tmp')) {
+        throw new Error('disk full');
+      }
+      return originalWriteBinary(path, data);
+    };
+
+    await expect(folderService.encryptFile(file, key)).rejects.toThrow('disk full');
+    fileService.writeBinary = originalWriteBinary;
+
+    expect(app.vault.getAbstractFileByPath('final-write-fail/note.md.locked.tmp')).toBeNull();
+    expect(app.vault.getAbstractFileByPath('final-write-fail/note.md.locked')).toBeNull();
+    expect(app.vault.getAbstractFileByPath('final-write-fail/note.md')).not.toBeNull();
+  });
+
+  it('should reject truncated encrypted files with a clear error', async () => {
+    const folder = addFolder('truncated');
+    addFile(folder, 'note.md', 'content');
+    const key = await encryptionService.generateMasterKey();
+    await folderService.encryptFolderContents(folder, key);
+
+    const locked = app.vault.getAbstractFileByPath('truncated/note.md.locked') as TFile;
+    // MAGIC header only: passes hasMagic but is shorter than header + IV.
+    await app.vault.modifyBinary(locked, new TextEncoder().encode('ENC!').buffer);
+
+    await expect(folderService.decryptFile(locked, key)).rejects.toThrow(/truncated or corrupt/);
+  });
+
+  it('should record partial decrypt failures on the unlocked state', async () => {
+    const folder = addFolder('partial-unlock');
+    addFile(folder, 'good.md', 'good content');
+    addFile(folder, 'bad.md', 'bad content');
+    await folderService.createEncryptedFolder(folder, 'password123', true);
+
+    const corruptLocked = app.vault.getAbstractFileByPath('partial-unlock/bad.md.locked') as TFile;
+    await app.vault.modifyBinary(corruptLocked, new TextEncoder().encode('ENC!invalid_ciphertext_bytes').buffer);
+
+    const unlocked = await folderService.unlockFolder(folder, 'password123');
+    expect(unlocked).toBe(true);
+    expect(app.vault.getAbstractFileByPath('partial-unlock/good.md')).not.toBeNull();
+
+    const metaFile = app.vault.getAbstractFileByPath('partial-unlock/obsidian-folder-meta.json') as TFile;
+    const metaStr = new TextDecoder().decode(await app.vault.readBinary(metaFile));
+    const metadata = JSON.parse(metaStr);
+    expect(metadata.state).toBe('unlocked');
+    expect(metadata.lastError).toMatch(/Partial decrypt/);
   });
 });
