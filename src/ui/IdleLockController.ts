@@ -43,12 +43,21 @@ export class IdleLockController {
   }
 
   async handleIdleAutoLock(): Promise<void> {
-    this.updateCountdownStatus();
-    this.maybeShowWarning();
+    // Cheap gate first: with nothing unlocked there is no countdown, no
+    // warning, and no lock work — skip all three computations and the
+    // status-bar write for this tick.
+    if (this.folderService.getUnlockedFolderPaths().length === 0) {
+      this.clearCountdownStatus();
+      return;
+    }
+
+    const countdown = this.folderService.getNextIdleLockCountdown();
+    this.updateCountdownStatus(countdown);
+    this.maybeShowWarning(countdown);
 
     const locked = await this.folderService.runIdleAutoLock();
     if (locked) {
-      this.updateCountdownStatus();
+      this.updateCountdownStatus(this.folderService.getNextIdleLockCountdown());
       new Notice('Inactive unlocked folders were locked automatically.');
     }
   }
@@ -57,31 +66,42 @@ export class IdleLockController {
     this.folderService.recordActivityForItem(this.app.workspace.getActiveFile());
   }
 
-  updateCountdownStatus(): void {
+  updateCountdownStatus(countdown: IdleLockCountdown | null = this.folderService.getNextIdleLockCountdown()): void {
     if (!this.statusBarEl) {
       return;
     }
 
-    const countdown = this.folderService.getNextIdleLockCountdown();
     if (!countdown) {
-      this.statusBarEl.textContent = '';
-      this.statusBarEl.hide();
-      this.warningKeys.clear();
+      this.clearCountdownStatus();
       return;
     }
 
     this.statusBarEl.show();
     const folderName = countdown.folderPath.split('/').pop() || countdown.folderPath;
-    this.statusBarEl.textContent = `Encrypted Folders: locks "${folderName}" in ${formatCountdown(countdown.remainingMs)}`;
+    const text = `Encrypted Folders: locks "${folderName}" in ${formatCountdown(countdown.remainingMs)}`;
+    // The text only changes once per second; skip redundant DOM writes.
+    if (this.statusBarEl.textContent !== text) {
+      this.statusBarEl.textContent = text;
+    }
   }
 
-  private maybeShowWarning(): void {
+  private clearCountdownStatus(): void {
+    if (!this.statusBarEl) {
+      return;
+    }
+    if (this.statusBarEl.textContent !== '') {
+      this.statusBarEl.textContent = '';
+    }
+    this.statusBarEl.hide();
+    this.warningKeys.clear();
+  }
+
+  private maybeShowWarning(countdown: IdleLockCountdown | null = this.folderService.getNextIdleLockCountdown()): void {
     const warningSeconds = this.getWarningSeconds();
     if (warningSeconds <= 0) {
       return;
     }
 
-    const countdown = this.folderService.getNextIdleLockCountdown();
     if (!countdown || countdown.isExpired) {
       return;
     }

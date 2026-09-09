@@ -155,7 +155,7 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
   }
 
   private async runEncryptedFolderScan(): Promise<void> {
-    await this.plugin.folderService.syncFolders();
+    await this.plugin.folderService.syncFolders(3, 300, true);
     new Notice('Encrypted folder scan complete.');
   }
 }

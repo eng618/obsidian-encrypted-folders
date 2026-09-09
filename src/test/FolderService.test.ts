@@ -495,6 +495,30 @@ describe('FolderService Integration', () => {
     expect(freshService.isEncryptedFolder(folder)).toBe(true);
   });
 
+  it('should skip the adapter tree walk when the index already found folders', async () => {
+    const folder = addFolder('indexed-scan');
+    addFile(folder, 'note.md', 'content');
+    await folderService.createEncryptedFolder(folder, 'password123', true);
+
+    // First sync performs the full adapter walk (stale initial state).
+    const listSpy = vi.spyOn(fileService, 'list');
+    await folderService.syncFolders();
+    expect(listSpy).toHaveBeenCalled();
+    expect(folderService.isEncryptedFolder(folder)).toBe(true);
+
+    // Second sync finds folders via the index and skips the tree walk.
+    listSpy.mockClear();
+    await folderService.syncFolders();
+    expect(listSpy).not.toHaveBeenCalled();
+    expect(folderService.isEncryptedFolder(folder)).toBe(true);
+
+    // Forced scans still walk the tree.
+    await folderService.syncFolders(3, 300, true);
+    expect(listSpy).toHaveBeenCalled();
+
+    listSpy.mockRestore();
+  });
+
   it('should journal lock and unlock metadata state transitions', async () => {
     const folder = new TFolder();
     folder.path = 'journal';
@@ -608,13 +632,13 @@ describe('FolderService Integration', () => {
 
     const password = 'password123';
 
-    // Mock a failure during the second file's processing
-    const originalWriteBinary = fileService.writeBinary.bind(fileService);
-    fileService.writeBinary = async (path: string, data: ArrayBuffer) => {
-      if (path === 'rollback-test/note2.md.locked') {
+    // Mock a failure during the second file's promotion to its final path
+    const originalRenameFile = fileService.renameFile.bind(fileService);
+    fileService.renameFile = async (file: TFile, newPath: string) => {
+      if (newPath === 'rollback-test/note2.md.locked') {
         throw new Error('Disk full or crash');
       }
-      return originalWriteBinary(path, data);
+      return originalRenameFile(file, newPath);
     };
 
     try {
@@ -624,8 +648,8 @@ describe('FolderService Integration', () => {
       expect(e).toBeDefined();
     }
 
-    // Restore original writeBinary for verification
-    fileService.writeBinary = originalWriteBinary;
+    // Restore original renameFile for verification
+    fileService.renameFile = originalRenameFile;
 
     // File 1 should have been rolled back to plaintext
     const restoredFile1 = getOptionalTFile('rollback-test/note1.md');
@@ -890,21 +914,18 @@ describe('FolderService Integration', () => {
     expect(app.vault.getAbstractFileByPath('partial-corrupt/corrupt.md.locked')).not.toBeNull();
   });
 
-  it('should clean up staging files when the final write fails', async () => {
+  it('should clean up staging files when the final promotion fails', async () => {
     const folder = addFolder('final-write-fail');
     const file = addFile(folder, 'note.md', 'important plaintext note');
     const key = await encryptionService.generateMasterKey();
 
-    const originalWriteBinary = fileService.writeBinary.bind(fileService);
-    fileService.writeBinary = async (path: string, data: ArrayBuffer) => {
-      if (path.endsWith('.locked') && !path.endsWith('.locked.tmp')) {
-        throw new Error('disk full');
-      }
-      return originalWriteBinary(path, data);
+    const originalRenameFile = fileService.renameFile.bind(fileService);
+    fileService.renameFile = async () => {
+      throw new Error('disk full');
     };
 
     await expect(folderService.encryptFile(file, key)).rejects.toThrow('disk full');
-    fileService.writeBinary = originalWriteBinary;
+    fileService.renameFile = originalRenameFile;
 
     expect(app.vault.getAbstractFileByPath('final-write-fail/note.md.locked.tmp')).toBeNull();
     expect(app.vault.getAbstractFileByPath('final-write-fail/note.md.locked')).toBeNull();
@@ -942,5 +963,28 @@ describe('FolderService Integration', () => {
     const metadata = JSON.parse(metaStr);
     expect(metadata.state).toBe('unlocked');
     expect(metadata.lastError).toMatch(/Partial decrypt/);
+  });
+
+  it('should encrypt each file with one read, one staged write, and one rename', async () => {
+    const folder = addFolder('op-count');
+    addFile(folder, 'a.md', 'aaa');
+    addFile(folder, 'b.md', 'bbb');
+    const key = await encryptionService.generateMasterKey();
+
+    const reads = vi.spyOn(fileService, 'readBinary');
+    const writes = vi.spyOn(fileService, 'writeBinary');
+    const renames = vi.spyOn(fileService, 'renameFile');
+
+    await folderService.encryptFolderContents(folder, key);
+
+    // Per file: 1 orig read + 1 tmp write + 1 rename (no read-back, no
+    // duplicate final write). Shred performs the remaining modify.
+    expect(reads).toHaveBeenCalledTimes(2);
+    expect(writes).toHaveBeenCalledTimes(2);
+    expect(renames).toHaveBeenCalledTimes(2);
+
+    reads.mockRestore();
+    writes.mockRestore();
+    renames.mockRestore();
   });
 });

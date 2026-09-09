@@ -1,6 +1,6 @@
 import { Menu, TFile, TFolder } from 'obsidian';
 import type EncryptedFoldersPlugin from '../../main';
-import { updateExplorerIndicators } from '../ui/ExplorerIndicators';
+import { scheduleExplorerIndicators } from '../ui/ExplorerIndicators';
 import { registerFolderMenu } from '../ui/FolderMenuHandler';
 
 export interface EventSubscriptionContext {
@@ -47,6 +47,7 @@ export function registerEventSubscriptions(ctx: EventSubscriptionContext): void 
 
   plugin.registerEvent(
     app.vault.on('rename', (file: unknown, oldPath: string) => {
+      folderService.invalidateEncryptedParentCache();
       if (file instanceof TFolder) {
         folderService.updatePath(oldPath, file.path);
       }
@@ -54,24 +55,26 @@ export function registerEventSubscriptions(ctx: EventSubscriptionContext): void 
         folderService.recordActivityForItem(file);
         plugin.reprocessCoordinator.queueForItem(file);
       }
-      folderService.requestSyncFolders('rename');
+      folderService.requestSyncFolders('rename', true);
     }),
   );
 
   plugin.registerEvent(
     app.vault.on('delete', (file: unknown) => {
+      folderService.invalidateEncryptedParentCache();
       if (file instanceof TFile || file instanceof TFolder) {
         folderService.recordActivityForItem(file.parent);
       }
       if (file instanceof TFolder) {
         folderService.removePath(file.path);
       }
-      folderService.requestSyncFolders('delete');
+      folderService.requestSyncFolders('delete', true);
     }),
   );
 
   plugin.registerEvent(
     app.vault.on('create', (file: unknown) => {
+      folderService.invalidateEncryptedParentCache();
       if (file instanceof TFolder || file instanceof TFile) {
         folderService.recordActivityForItem(file);
         plugin.reprocessCoordinator.queueForItem(file);
@@ -85,27 +88,28 @@ export function registerEventSubscriptions(ctx: EventSubscriptionContext): void 
 
   plugin.registerEvent(
     app.workspace.on('layout-change', () => {
-      updateExplorerIndicators(app, folderService);
+      scheduleExplorerIndicators(app, folderService);
     }),
   );
 
   plugin.registerEvent(
     app.vault.on('modify', (file: unknown) => {
+      // Note: no requestSyncFolders here — content edits cannot change the
+      // encrypted-folder set, and batch encrypt/decrypt fires a modify per
+      // file. Structural changes are covered by create/delete/rename.
       if (file instanceof TFile) {
         if (file.parent instanceof TFolder) {
-          updateExplorerIndicators(app, folderService);
+          scheduleExplorerIndicators(app, folderService);
         }
         folderService.recordActivityForItem(file);
         plugin.reprocessCoordinator.queueForItem(file);
         if (file.parent instanceof TFolder) {
           void folderService.reconcileFolderState(file.parent);
         }
-        folderService.requestSyncFolders('modify');
       } else if (file instanceof TFolder) {
-        updateExplorerIndicators(app, folderService);
+        scheduleExplorerIndicators(app, folderService);
         folderService.recordActivityForItem(file);
         plugin.reprocessCoordinator.queueForItem(file);
-        folderService.requestSyncFolders('modify');
       }
     }),
   );

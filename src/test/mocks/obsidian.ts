@@ -111,6 +111,26 @@ export class Vault {
     return this.files.get(normalizePath(path)) || null;
   });
 
+  rename = vi.fn(async (file: TFile, newPath: string) => {
+    const normalized = normalizePath(newPath);
+    this.files.delete(file.path);
+    if (file.parent) {
+      file.parent.children = file.parent.children.filter((c) => c !== file);
+    }
+    file.path = normalized;
+    const parts = normalized.split('/');
+    file.name = parts.pop() || '';
+    const parentPath = parts.join('/');
+    const parent = parentPath ? this.files.get(parentPath) : undefined;
+    if (parent instanceof TFolder) {
+      file.parent = parent;
+      if (!parent.children.includes(file)) {
+        parent.children.push(file);
+      }
+    }
+    this.files.set(normalized, file);
+  });
+
   getFiles = vi.fn(() => {
     return Array.from(this.files.values()).filter((file): file is TFile => file instanceof TFile);
   });

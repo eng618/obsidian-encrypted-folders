@@ -35,12 +35,22 @@ export class FolderService {
   private unlockedFolders: Map<string, CryptoKey> = new Map();
   private encryptedFolders: Set<string> = new Set();
   private syncDebounceTimer: number | null = null;
+  private fullScanRequested = false;
+  private lastFullScanAt = 0;
+  private readonly FULL_SCAN_STALE_MS = 60_000;
+  private encryptedParentCache: Map<string, TFolder | null> = new Map();
   private autoLockInProgress = false;
   private debugLogging = false;
 
   private readonly META_FILE_NAME = 'obsidian-folder-meta.json';
   private readonly LOCKED_EXTENSION = '.locked';
   private readonly README_FILE_NAME = 'README_ENCRYPTED.md';
+  /**
+   * Per-file processing cap. Encrypt/decrypt transiently holds ~3-4x the
+   * file size in memory (plaintext + ciphertext + staged buffers), so
+   * fail fast with a clear message instead of risking OOM on huge files.
+   */
+  private readonly MAX_PROCESSABLE_BYTES = 64 * 1024 * 1024;
 
   private metadataManager: MetadataManager;
   private autoLockManager: AutoLockManager;
@@ -104,17 +114,22 @@ export class FolderService {
     return Array.from(this.unlockedFolders.keys());
   }
 
-  requestSyncFolders(reason = 'event'): void {
+  requestSyncFolders(reason = 'event', forceFullScan = false): void {
     if (this.syncDebounceTimer) {
       window.clearTimeout(this.syncDebounceTimer);
+    }
+    if (forceFullScan) {
+      this.fullScanRequested = true;
     }
 
     this.syncDebounceTimer = window.setTimeout(() => {
       this.syncDebounceTimer = null;
-      void this.syncFolders(4, 300).catch((error: unknown) => {
+      const forceFull = this.fullScanRequested;
+      this.fullScanRequested = false;
+      void this.syncFolders(4, 300, forceFull).catch((error: unknown) => {
         this.debug('syncFolders failed after request', { reason, error });
       });
-    }, 250);
+    }, 1000);
   }
 
   debug(message: string, data?: unknown): void {
@@ -407,6 +422,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
 
     this.encryptedFolders.add(this.toFolderKey(folder.path));
+    this.encryptedParentCache.clear();
     this.debug('encrypted folder created', { folder: folder.path, state: metadata.state });
     this.telemetry?.trackEvent('folder_encrypted', {
       lock_immediately: lockImmediately,
@@ -522,6 +538,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   }
 
   async encryptFile(file: TFile, key: CryptoKey): Promise<boolean> {
+    this.assertProcessableSize(file);
     const data = await this.fileService.readBinary(file);
     if (this.hasMagic(data)) {
       return false;
@@ -533,16 +550,19 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     const finalPath = normalizePath(`${file.path}${this.LOCKED_EXTENSION}`);
 
     const tmpFile = await this.fileService.writeBinary(tmpPath, combined);
-    const stagedData = await this.fileService.readBinary(tmpFile);
-    if (!this.hasMagic(stagedData) || stagedData.byteLength !== combined.byteLength) {
+    // Size check instead of a full read-back: catches truncation without
+    // spending a second read per file.
+    if (tmpFile.stat.size !== combined.byteLength) {
       await this.deleteFileIfExists(tmpPath);
       throw new Error(`Staging write integrity check failed for file ${file.path}`);
     }
 
     try {
-      await this.fileService.writeBinary(finalPath, combined);
+      // Promote by rename: avoids rewriting the same ciphertext bytes and
+      // keeps staging atomicity (tmp exists until the rename completes).
+      await this.fileService.renameFile(tmpFile, finalPath);
     } finally {
-      // Staging file must never leak, including when the final write throws.
+      // Staging file must never leak, including when the rename throws.
       await this.deleteFileIfExists(tmpPath);
     }
 
@@ -558,6 +578,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   }
 
   async decryptFile(file: TFile, key: CryptoKey): Promise<void> {
+    this.assertProcessableSize(file);
     const data = await this.fileService.readBinary(file);
     if (!this.hasMagic(data)) {
       return;
@@ -592,6 +613,18 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
         `  Ciphertext Length: ${ciphertext?.byteLength ?? 0}`;
       this.debug(errorMsg);
       throw new Error(errorMsg);
+    }
+  }
+
+  private assertProcessableSize(file: TFile): void {
+    const size = Math.max(0, file.stat?.size ?? 0);
+    if (size > this.MAX_PROCESSABLE_BYTES) {
+      const sizeMb = (size / (1024 * 1024)).toFixed(1);
+      const limitMb = this.MAX_PROCESSABLE_BYTES / (1024 * 1024);
+      throw new Error(
+        `File ${file.path} is ${sizeMb} MB, above the ${limitMb} MB per-file limit. ` +
+          'Split the file into smaller notes to encrypt it.',
+      );
     }
   }
 
@@ -662,7 +695,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
   }
 
-  async syncFolders(retries = 3, retryDelayMs = 300): Promise<void> {
+  async syncFolders(retries = 3, retryDelayMs = 300, forceFullScan = false): Promise<void> {
     const discovered = new Set<string>();
 
     const indexedFiles = this.fileService.getFiles();
@@ -672,17 +705,26 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       }
     }
 
-    try {
-      await this.scanAdapterTree('', discovered);
-    } catch (error: unknown) {
-      this.debug('adapter scan failed', error);
+    // The adapter tree walk catches meta files the index hasn't picked up
+    // yet (slow sync/index lag), but costs a request per folder. Run it on
+    // structural events, when the index found nothing, or when the last
+    // full scan is stale — not on every debounced event.
+    const fullScanStale = Date.now() - this.lastFullScanAt > this.FULL_SCAN_STALE_MS;
+    if (forceFullScan || fullScanStale || discovered.size === 0) {
+      try {
+        await this.scanAdapterTree('', discovered);
+      } catch (error: unknown) {
+        this.debug('adapter scan failed', error);
+      }
+      this.lastFullScanAt = Date.now();
     }
 
     this.encryptedFolders = new Set(Array.from(discovered).filter((value) => value.length > 0));
+    this.encryptedParentCache.clear();
 
     if (this.encryptedFolders.size === 0 && retries > 1) {
       await this.sleep(retryDelayMs);
-      await this.syncFolders(retries - 1, retryDelayMs);
+      await this.syncFolders(retries - 1, retryDelayMs, forceFullScan);
       return;
     }
 
@@ -707,15 +749,32 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   }
 
   getEncryptedParent(file: TFile | TFolder): TFolder | null {
+    const cacheKey = this.toFolderKey(file.path);
+    const cached = this.encryptedParentCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+
     let parent = file.parent;
     while (parent) {
       const metaPath = this.metadataManager.getMetaPath(parent.path);
       if (this.fileService.getFile(metaPath)) {
+        this.encryptedParentCache.set(cacheKey, parent);
         return parent;
       }
       parent = parent.parent;
     }
+    this.encryptedParentCache.set(cacheKey, null);
     return null;
+  }
+
+  /**
+   * Drops memoized encrypted-parent lookups. Called on any structural
+   * vault change (create/delete/rename) and after internal mutations;
+   * lookups between structural events are pure reads.
+   */
+  invalidateEncryptedParentCache(): void {
+    this.encryptedParentCache.clear();
   }
 
   isInsideEncryptedFolder(file: TFile | TFolder): boolean {
@@ -1029,6 +1088,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       this.encryptedFolders.delete(oldKey);
       this.encryptedFolders.add(newKey);
     }
+    this.encryptedParentCache.clear();
   }
 
   removePath(path: string): void {
@@ -1036,6 +1096,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     this.unlockedFolders.delete(key);
     this.autoLockManager.removePath(key);
     this.encryptedFolders.delete(key);
+    this.encryptedParentCache.clear();
   }
 
   async removeEncryption(folder: TFolder, password?: string, isRecovery = false): Promise<boolean> {
@@ -1062,6 +1123,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     this.unlockedFolders.delete(this.toFolderKey(folder.path));
     this.autoLockManager.removePath(this.toFolderKey(folder.path));
     this.encryptedFolders.delete(this.toFolderKey(folder.path));
+    this.encryptedParentCache.clear();
     this.telemetry?.trackEvent('encryption_removed', {});
 
     return true;

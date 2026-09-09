@@ -135,6 +135,14 @@ export class FileService {
     return this.vault.getAbstractFileByPath(normalizePath(path));
   }
 
+  /**
+   * Renames a file within the vault, updating the vault cache. Used to
+   * promote staging files to their final path without rewriting bytes.
+   */
+  async renameFile(file: TFile, newPath: string): Promise<void> {
+    await this.vault.rename(file, normalizePath(newPath));
+  }
+
   getFiles(): TFile[] {
     return this.vault.getFiles();
   }
