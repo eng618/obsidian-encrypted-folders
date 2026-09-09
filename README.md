@@ -125,8 +125,10 @@ npm run lint  # Linting and type checking
 
 ## 📚 Documentation
 
-- [Technical Walkthrough](./docs/WALKTHROUGH.md) - Deep dive into how it works.
-- [Development Plan](./docs/DEVELOPMENT_PLAN.md) - Roadmap and project status.
+- [Documentation index](./docs/index.md) - Map of all guides, references, and explanations.
+- [Getting started](./docs/tutorials/getting-started.md) - Install the plugin and encrypt your first folder.
+- [Security spec](./docs/reference/security-spec.md) - Algorithms, key derivation, and file formats.
+- [Threat model](./docs/explanation/threat-model.md) - What encryption protects and what it does not.
 
 ## 🤝 Contributing
 
