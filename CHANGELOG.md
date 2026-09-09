@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/eng618/obsidian-encrypted-folders/compare/1.7.0...1.7.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* Resolve scorecard Review warnings ([2508142](https://github.com/eng618/obsidian-encrypted-folders/commit/2508142da9cc30965f17cd3a86be4bf258baed36))
+
 ## [1.7.0](https://github.com/eng618/obsidian-encrypted-folders/compare/1.6.0...1.7.0) (2026-08-28)
 
 
