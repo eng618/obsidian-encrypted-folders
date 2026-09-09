@@ -24,7 +24,11 @@ export class BatchProcessor {
   private readonly DEFAULT_MAX_CONCURRENT_FILES = 3;
   private readonly DEFAULT_MAX_CONCURRENT_BYTES = 64 * 1024 * 1024;
 
-  constructor(private isProtectedFile: (file: TFile) => boolean) {}
+  constructor(private protectedFileNames: readonly string[] = []) {}
+
+  isProtectedFile(file: TFile): boolean {
+    return this.protectedFileNames.includes(file.name);
+  }
 
   countLockedFiles(folder: TFolder): number {
     const stack: TFolder[] = [folder];

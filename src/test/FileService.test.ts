@@ -75,7 +75,7 @@ describe('FileService', () => {
     });
   });
 
-  describe('secureWrite', () => {
+  describe('overwriteBinary', () => {
     it('should modify existing file directly', async () => {
       const existingFile = new TFile();
       existingFile.path = 'secure.txt';
@@ -84,7 +84,7 @@ describe('FileService', () => {
       vault.files.set('secure.txt', existingFile);
 
       const testData = new Uint8Array([7, 8, 9]).buffer;
-      const result = await fileService.secureWrite('secure.txt', testData);
+      const result = await fileService.overwriteBinary('secure.txt', testData);
 
       expect(vault.modifyBinary).toHaveBeenCalledWith(existingFile, testData);
       expect(result).toBe(existingFile);
@@ -93,7 +93,7 @@ describe('FileService', () => {
     it('should create new file if not exists', async () => {
       const testData = new Uint8Array([10, 11, 12]).buffer;
 
-      const result = await fileService.secureWrite('newsecure.txt', testData);
+      const result = await fileService.overwriteBinary('newsecure.txt', testData);
 
       expect(vault.createBinary).toHaveBeenCalled();
       expect(result.path).toBe('newsecure.txt');

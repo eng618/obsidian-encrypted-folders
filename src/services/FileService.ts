@@ -1,4 +1,4 @@
-import { TFile, Vault, normalizePath } from 'obsidian';
+import { TAbstractFile, TFile, Vault, normalizePath } from 'obsidian';
 
 export class FileService {
   private readonly MAX_RANDOM_SIZE = 65536;
@@ -50,12 +50,12 @@ export class FileService {
   }
 
   /**
-   * Writes data to a file securely by overwriting with random data first if it exists.
-   *
-   * @param path The path to write to.
-   * @param data The data to write.
+   * Overwrites a file with new data in a single write. Multiple rapid
+   * modifyBinary calls have been observed to cause file corruption in some
+   * Obsidian builds, so callers should prefer one overwrite over shred-style
+   * multi-pass writes.
    */
-  async secureWrite(path: string, data: ArrayBuffer): Promise<TFile> {
+  async overwriteBinary(path: string, data: ArrayBuffer): Promise<TFile> {
     const normalizedPath = normalizePath(path);
     const existingFile = this.vault.getAbstractFileByPath(normalizedPath);
 
@@ -70,6 +70,14 @@ export class FileService {
   }
 
   /**
+   * @deprecated Use {@link overwriteBinary} instead. Kept for backward
+   * compatibility with existing callers and tests.
+   */
+  async secureWrite(path: string, data: ArrayBuffer): Promise<TFile> {
+    return this.overwriteBinary(path, data);
+  }
+
+  /**
    * Deletes a file.
    *
    * @param file The file to delete.
@@ -80,11 +88,14 @@ export class FileService {
 
   /**
    * Shreds a file by overwriting it with random data before deletion.
+   * Uses a single overwrite pass: multiple rapid modifyBinary calls have
+   * been observed to cause file corruption in some Obsidian builds, and the
+   * vault API replaces whole-file content (no offset writes).
    *
    * @param file The file to shred.
    */
   async shredFile(file: TFile): Promise<void> {
-    const size = file.stat.size;
+    const size = Math.max(0, file.stat.size);
     const randomData = new Uint8Array(size);
     this.fillRandomValues(randomData);
     await this.vault.modifyBinary(file, randomData.buffer);
@@ -118,5 +129,17 @@ export class FileService {
   getFile(path: string): TFile | null {
     const file = this.vault.getAbstractFileByPath(normalizePath(path));
     return file instanceof TFile ? file : null;
+  }
+
+  getAbstractFileByPath(path: string): TAbstractFile | null {
+    return this.vault.getAbstractFileByPath(normalizePath(path));
+  }
+
+  getFiles(): TFile[] {
+    return this.vault.getFiles();
+  }
+
+  async list(basePath: string): Promise<{ files: string[]; folders: string[] }> {
+    return this.vault.adapter.list(basePath);
   }
 }

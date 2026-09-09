@@ -91,7 +91,7 @@ describe('Property-Based Cryptographic & Fuzzing Tests', () => {
   }, 15000);
 
   test('Property 4: BatchProcessor handles unicode paths & deep folder structures without crashing', () => {
-    const processor = new BatchProcessor(() => false);
+    const processor = new BatchProcessor([]);
 
     fc.assert(
       fc.property(

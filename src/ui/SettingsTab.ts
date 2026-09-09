@@ -1,5 +1,5 @@
 import { App, Notice, PluginSettingTab, Setting, SettingDefinitionItem } from 'obsidian';
-import EncryptedFoldersPlugin from '../../main';
+import type EncryptedFoldersPlugin from '../../main';
 
 type SettingsKey =
   'autoLockOnBackground' | 'autoLockIdleMinutes' | 'autoLockWarningSeconds' | 'debugLogging' | 'maxPasswordAttempts';
