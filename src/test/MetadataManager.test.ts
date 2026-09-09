@@ -1,7 +1,7 @@
 import { FolderMetadata } from '../models/FolderState';
 import { EncryptionService } from '../services/EncryptionService';
 import { FileService } from '../services/FileService';
-import { MetadataManager } from '../services/MetadataManager';
+import { MetadataManager, macsEqual } from '../services/MetadataManager';
 import { TFile, TFolder } from './mocks/obsidian';
 
 describe('MetadataManager', () => {
@@ -82,5 +82,85 @@ describe('MetadataManager', () => {
 
     const isWrongPasswordValid = await metadataManager.verifyMetadataMac(sampleMeta, 'wrong-password', false);
     expect(isWrongPasswordValid).toBe(false);
+  });
+
+  test('should treat missing MAC as legacy and still verify password via MAC when present', async () => {
+    const sampleMeta: FolderMetadata = {
+      version: 2,
+      schemaVersion: 1,
+      id: 'legacy-no-mac',
+      encryptionMethod: 'AES-256-GCM',
+      kdfMethod: 'PBKDF2-SHA256',
+      salt: metadataManager.arrayBufferToBase64(encryptionService.generateSalt()),
+      iterations: 600000,
+      lockFile: 'obsidian-folder-meta.json',
+      testToken: 'token-data',
+      wrappedMasterKey: 'wrapped-key-data',
+      masterKeyIV: 'iv-data',
+    };
+
+    // Legacy path: no MAC stored yet — verification defers to wrapped-key/testToken.
+    expect(await metadataManager.verifyMetadataMac(sampleMeta, 'any-password', false)).toBe(true);
+  });
+
+  test('should reject malformed, unsupported, and tampered-looking metadata', () => {
+    const valid: FolderMetadata = {
+      version: 2,
+      schemaVersion: 2,
+      id: 'valid-id',
+      encryptionMethod: 'AES-256-GCM',
+      kdfMethod: 'PBKDF2-SHA256',
+      salt: 'c2FsdA==',
+      iterations: 600000,
+      lockFile: 'obsidian-folder-meta.json',
+      testToken: 'dG9rZW4=',
+      wrappedMasterKey: 'd3JhcHBlZA==',
+      masterKeyIV: 'aXY=',
+    };
+
+    expect(() => metadataManager.parseMetadata(JSON.stringify(valid))).not.toThrow();
+    expect(() => metadataManager.parseMetadata('not json{{{')).toThrow(/not valid JSON/);
+    expect(() => metadataManager.parseMetadata('42')).toThrow(/unexpected shape/);
+    expect(() => metadataManager.parseMetadata(JSON.stringify({ ...valid, encryptionMethod: 'AES-128-CBC' }))).toThrow(
+      /encryptionMethod/,
+    );
+    expect(() => metadataManager.parseMetadata(JSON.stringify({ ...valid, iterations: 1000 }))).toThrow(/iterations/);
+    expect(() => metadataManager.parseMetadata(JSON.stringify({ ...valid, schemaVersion: 99 }))).toThrow(
+      /unsupported schemaVersion/,
+    );
+    expect(() => metadataManager.parseMetadata(JSON.stringify({ ...valid, state: 'melting' }))).toThrow(/state/);
+    expect(() => metadataManager.parseMetadata(JSON.stringify({ ...valid, expectedLockedFiles: -1 }))).toThrow(
+      /expectedLockedFiles/,
+    );
+  });
+
+  test('should cap lastError length on state transitions', async () => {
+    const folder = new TFolder();
+    folder.path = 'err-folder';
+    const meta: FolderMetadata = {
+      version: 2,
+      schemaVersion: 2,
+      id: 'err-id',
+      encryptionMethod: 'AES-256-GCM',
+      kdfMethod: 'PBKDF2-SHA256',
+      salt: 'c2FsdA==',
+      iterations: 600000,
+      lockFile: 'obsidian-folder-meta.json',
+      testToken: 'dG9rZW4=',
+      wrappedMasterKey: 'd3JhcHBlZA==',
+      masterKeyIV: 'aXY=',
+    };
+    const next = await metadataManager.transitionMetadataState(folder as any, meta, 'error', 'x'.repeat(2000));
+    expect(next.lastError?.length).toBeLessThanOrEqual(500);
+  });
+
+  test('macsEqual compares in constant time and fails closed', () => {
+    const a = metadataManager.arrayBufferToBase64(new Uint8Array([1, 2, 3]).buffer);
+    const b = metadataManager.arrayBufferToBase64(new Uint8Array([1, 2, 3]).buffer);
+    const c = metadataManager.arrayBufferToBase64(new Uint8Array([1, 2, 4]).buffer);
+    expect(macsEqual(a, b)).toBe(true);
+    expect(macsEqual(a, c)).toBe(false);
+    expect(macsEqual(a, '!!!not-base64!!!')).toBe(false);
+    expect(macsEqual(a, metadataManager.arrayBufferToBase64(new Uint8Array([1, 2]).buffer))).toBe(false);
   });
 });

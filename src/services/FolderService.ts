@@ -267,7 +267,16 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   }
 
   async reconcileFolderState(folder: TFolder): Promise<void> {
-    const metadata = await this.readMetadata(folder);
+    let metadata;
+    try {
+      metadata = await this.readMetadata(folder);
+    } catch (error: unknown) {
+      // Event-path caller; corrupt metadata cannot be reconciled. Log and
+      // leave the folder locked rather than throwing into an unhandled
+      // rejection or treating it as unencrypted.
+      this.debug('reconcile skipped: unreadable metadata', { folder: folder.path, error: String(error) });
+      return;
+    }
     if (!metadata) {
       return;
     }
@@ -701,19 +710,57 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     return masterKey;
   }
 
+  /**
+   * Computes and attaches a missing metadata MAC after the secret has been
+   * proven valid (wrapped-key + testToken decrypt succeeded). Migrates
+   * legacy MAC-less metadata forward without locking out existing users.
+   */
+  private async migrateMissingMac(
+    metadata: FolderMetadata,
+    secret: string,
+    isRecovery: boolean,
+  ): Promise<FolderMetadata> {
+    const needsPasswordMac = !isRecovery && !metadata.mac;
+    const needsRecoveryMac = isRecovery && !metadata.recoveryMac;
+    if (!needsPasswordMac && !needsRecoveryMac) {
+      return metadata;
+    }
+    try {
+      const mac = await this.metadataManager.computeMetadataMac(metadata, secret, isRecovery);
+      const migrated = isRecovery ? { ...metadata, recoveryMac: mac } : { ...metadata, mac };
+      this.debug('migrated missing metadata MAC', { isRecovery });
+      return migrated;
+    } catch (error: unknown) {
+      this.debug('MAC migration skipped', { error: String(error) });
+      return metadata;
+    }
+  }
+
   async unlockFolder(
     folder: TFolder,
     secret: string,
     isRecovery = false,
     options?: FolderProcessingOptions,
   ): Promise<boolean> {
-    let metadata = await this.readMetadata(folder);
+    let metadata;
+    try {
+      metadata = await this.readMetadata(folder);
+    } catch (error: unknown) {
+      // Corrupt/unsupported metadata fails closed: refuse to unlock.
+      this.debug('unlock refused: unreadable metadata', { folder: folder.path, error: String(error) });
+      return false;
+    }
     if (!metadata) {
       return false;
     }
 
     await this.reconcileFolderState(folder);
-    metadata = await this.readMetadata(folder);
+    try {
+      metadata = await this.readMetadata(folder);
+    } catch (error: unknown) {
+      this.debug('unlock refused: unreadable metadata', { folder: folder.path, error: String(error) });
+      return false;
+    }
     if (!metadata) {
       return false;
     }
@@ -740,6 +787,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
       this.unlockedFolders.set(this.toFolderKey(folder.path), masterKey);
       this.recordActivityForPath(folder.path);
+      metadata = await this.migrateMissingMac(metadata, secret, isRecovery);
       await this.transitionMetadataState(folder, metadata, 'unlocked');
       this.debug('folder unlocked', { folder: folder.path, isRecovery });
       return true;
@@ -760,13 +808,24 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       return false;
     }
 
-    let metadata = await this.readMetadata(folder);
+    let metadata;
+    try {
+      metadata = await this.readMetadata(folder);
+    } catch (error: unknown) {
+      this.debug('reprocess refused: unreadable metadata', { folder: folder.path, error: String(error) });
+      return false;
+    }
     if (!metadata) {
       return false;
     }
 
     await this.reconcileFolderState(folder);
-    metadata = await this.readMetadata(folder);
+    try {
+      metadata = await this.readMetadata(folder);
+    } catch (error: unknown) {
+      this.debug('reprocess refused: unreadable metadata', { folder: folder.path, error: String(error) });
+      return false;
+    }
     if (!metadata) {
       return false;
     }
