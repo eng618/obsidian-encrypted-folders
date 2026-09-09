@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.7.2](https://github.com/eng618/obsidian-encrypted-folders/compare/1.7.1...1.7.2) (2026-09-09)
+
+
+### Features
+
+* Implement anonymous telemetry tracking for core plugin lifecycle and folder operations ([8865c43](https://github.com/eng618/obsidian-encrypted-folders/commit/8865c43157db2da3227c58b1a30f4742c614a7a5))
+* Implement modular folder management, processing coordinators, and menu-based folder encryption controls. ([12d0d70](https://github.com/eng618/obsidian-encrypted-folders/commit/12d0d7086b19c59ed7b8c720aa6b95545f8abe14))
+* Implement split KDF and session-based derivation caching to reduce PBKDF2 costs during folder unlock. ([742a643](https://github.com/eng618/obsidian-encrypted-folders/commit/742a6432c1085196bb87db263493a642561bf9c1))
+
+
+### Bug Fixes
+
+* Improve error handling and cleanup for encrypted file operations and partial folder unlocks ([eab5201](https://github.com/eng618/obsidian-encrypted-folders/commit/eab52014c89dee106cc85414d67320279265880e))
+
+
+### Code Refactoring
+
+* Add strict metadata validation, secure constant-time MAC comparison, and automated legacy MAC migration ([7d28983](https://github.com/eng618/obsidian-encrypted-folders/commit/7d28983197a484ef147eef095bbbbcd8a5df333a))
+* Optimize folder sync performance, improve idle lock efficiency, and enhance error handling during file promotion ([b0ff9e5](https://github.com/eng618/obsidian-encrypted-folders/commit/b0ff9e5ffdda79a7f4cb01466d42d5c6f2ad3807))
+
+
+### Documentation
+
+* Reorganize and expand documentation suite with new category structure and standardized explanations. ([569dbe1](https://github.com/eng618/obsidian-encrypted-folders/commit/569dbe1bbc6a36d3802b287cbde62a8417b0f0bb))
+
+
+### Miscellaneous Chores
+
+* Update release-please configuration with versioning policy and custom changelog sections ([eeb9a57](https://github.com/eng618/obsidian-encrypted-folders/commit/eeb9a577bf7c49f6af786cb7fbbad38d816c9a13))
+
 ## [1.7.1](https://github.com/eng618/obsidian-encrypted-folders/compare/1.7.0...1.7.1) (2026-09-09)
 
 
