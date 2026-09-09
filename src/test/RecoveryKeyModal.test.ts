@@ -19,6 +19,6 @@ describe('RecoveryKeyModal', () => {
     const buttonTexts = buttons.map((b) => b.textContent);
 
     expect(buttonTexts).toContain('Copy to clipboard');
-    expect(buttonTexts).toContain('Download Backup (.txt)');
+    expect(buttonTexts).toContain('Download backup (.txt)');
   });
 });

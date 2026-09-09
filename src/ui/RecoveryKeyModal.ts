@@ -18,7 +18,7 @@ export class RecoveryKeyModal extends Modal {
       cls: 'mod-warning',
     });
 
-    const keyContainer = contentEl.createEl('div', {
+    const keyContainer = contentEl.createDiv({
       cls: 'recovery-key-container',
     });
     keyContainer.textContent = this.recoveryKey;
@@ -30,7 +30,7 @@ export class RecoveryKeyModal extends Modal {
         });
       })
       .addButton((btn) => {
-        btn.setButtonText('Download Backup (.txt)').onClick(() => {
+        btn.setButtonText('Download backup (.txt)').onClick(() => {
           this.downloadRecoveryKey();
         });
       });
@@ -66,7 +66,7 @@ export class RecoveryKeyModal extends Modal {
     const text = `Obsidian Encrypted Folder Recovery Key\n--------------------------------------\nKey: ${this.recoveryKey}\nDate: ${new Date().toISOString()}\n\nKeep this key in a secure password manager.`;
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = this.contentEl.createEl('a');
     a.href = url;
     a.download = 'obsidian-recovery-key.txt';
     a.click();

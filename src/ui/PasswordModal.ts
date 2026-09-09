@@ -22,14 +22,14 @@ export class PasswordModal extends Modal {
     new Setting(contentEl).setName(this.title).setHeading();
 
     if (this.showLockToggle) {
-      const noticeEl = contentEl.createEl('div', {
+      const noticeEl = contentEl.createDiv({
         cls: 'metadata-disclosure-notice',
       });
       noticeEl.textContent =
-        'ℹ️ Note: Encryption protects your note contents. Note titles, filenames, and directory structures remain unencrypted.';
+        'Encryption protects your note contents. Note titles, filenames, and directory structures remain unencrypted.';
     }
 
-    const strengthEl = contentEl.createEl('div', {
+    const strengthEl = contentEl.createDiv({
       text: '',
       cls: 'password-strength password-strength-message',
     });
@@ -45,7 +45,7 @@ export class PasswordModal extends Modal {
       addPasswordToggle(passwordSetting, text);
     });
 
-    const errorEl = contentEl.createEl('div', {
+    const errorEl = contentEl.createDiv({
       text: '',
       cls: 'password-error',
     });
@@ -113,7 +113,7 @@ export class PasswordModal extends Modal {
         if (this.attempts >= this.maxAttempts) {
           const delay = Math.pow(2, this.attempts - this.maxAttempts + 1) * 1000;
           errorEl.textContent = `Too many attempts. Please wait ${delay / 1000}s.`;
-          await new Promise((resolve) => setTimeout(resolve, delay));
+          await new Promise((resolve) => window.setTimeout(resolve, delay));
         } else {
           errorEl.textContent = `Incorrect password. ${this.maxAttempts - this.attempts} attempts remaining.`;
         }

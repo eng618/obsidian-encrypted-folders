@@ -8,6 +8,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  attestations: write
+  id-token: write
 
 jobs:
   release-please:
@@ -55,3 +57,12 @@ jobs:
             echo "No artifacts found to upload!"
             exit 1
           fi
+
+      - name: Attest release assets
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/main.js
+            manifest.json
+            dist/styles.css

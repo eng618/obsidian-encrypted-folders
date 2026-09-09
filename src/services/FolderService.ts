@@ -88,7 +88,7 @@ export class FolderService {
     }, 250);
   }
 
-  private debug(message: string, data?: unknown): void {
+  debug(message: string, data?: unknown): void {
     if (!this.debugLogging) {
       return;
     }
@@ -106,7 +106,7 @@ export class FolderService {
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
   private getMetaPath(folderPath: string): string {
@@ -356,9 +356,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
           new TextEncoder().encode(this.buildReadmeContent(folder)).buffer,
         );
         metadata = await this.transitionMetadataState(folder, metadata, 'locked');
-      } catch (error) {
+      } catch (error: unknown) {
         await this.transitionMetadataState(folder, metadata, 'error', String(error));
-        throw error;
+        throw error instanceof Error ? error : new Error(String(error));
       }
     } else {
       this.unlockedFolders.set(this.toFolderKey(folder.path), masterKey);
@@ -405,10 +405,10 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
         },
       );
       return results.filter(Boolean).length;
-    } catch (error) {
+    } catch (error: unknown) {
       this.debug('Encryption failed mid-process, attempting rollback', { error, processedFiles });
       await this.rollbackEncryption(processedFiles, key);
-      throw error;
+      throw error instanceof Error ? error : new Error(String(error));
     }
   }
 
@@ -436,7 +436,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
         if (tmpFile) {
           await this.app.fileManager.trashFile(tmpFile);
         }
-      } catch (rollbackError) {
+      } catch (rollbackError: unknown) {
         this.debug('Rollback failed for file', { path: file.originalPath, rollbackError });
       }
     }
@@ -449,7 +449,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     await this.batchProcessor.processFilesWithLimits(folder, 'decrypt', files, options, async (file) => {
       try {
         await this.decryptFile(file, key);
-      } catch (error) {
+      } catch (error: unknown) {
         this.debug('File decryption error', { path: file.path, error });
         errors.push({ path: file.path, error });
       }
@@ -524,14 +524,14 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       await this.fileService.writeBinary(newPath, plaintext);
       await this.app.fileManager.trashFile(file);
     } catch (error: unknown) {
-      const err = error as { name?: string; message?: string };
+      const err = error instanceof Error ? error : new Error(String(error));
       const errorMsg =
         `Failed to decrypt file: ${file.path}\n` +
-        `  Error: ${err.name ?? 'UnknownError'} - ${err.message ?? 'Unknown message'}\n` +
+        `  Error: ${err.name} - ${err.message}\n` +
         `  File Size: ${data.byteLength}\n` +
         `  IV Length: ${iv.byteLength}\n` +
         `  Ciphertext Length: ${ciphertext.byteLength}`;
-      console.error(errorMsg);
+      this.debug(errorMsg);
       throw new Error(errorMsg);
     }
   }
@@ -617,7 +617,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
     try {
       await this.scanAdapterTree('', discovered);
-    } catch (error) {
+    } catch (error: unknown) {
       this.debug('adapter scan failed', error);
     }
 
@@ -752,7 +752,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       await this.transitionMetadataState(folder, metadata, 'unlocked');
       this.debug('folder unlocked', { folder: folder.path, isRecovery });
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
       await this.transitionMetadataState(folder, metadata, 'error', String(error));
       this.debug('unlock error', { folder: folder.path, error });
       return false;
@@ -819,7 +819,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
       this.debug('locked folder reprocessed', { folder: folder.path, encryptedAny: results.some(Boolean) });
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
       await this.transitionMetadataState(folder, metadata, 'error', String(error));
       this.debug('locked folder reprocess error', { folder: folder.path, error });
       return false;
@@ -854,9 +854,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       this.autoLockManager.removePath(folderKey);
       await this.transitionMetadataState(folder, metadata, 'locked');
       this.debug('folder locked', { folder: folder.path });
-    } catch (error) {
+    } catch (error: unknown) {
       await this.transitionMetadataState(folder, metadata, 'error', String(error));
-      throw error;
+      throw error instanceof Error ? error : new Error(String(error));
     }
   }
 

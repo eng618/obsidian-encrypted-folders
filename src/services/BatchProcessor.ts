@@ -139,12 +139,13 @@ export class BatchProcessor {
     return error;
   }
 
-  getAbortReason(signal?: AbortSignal): unknown {
+  getAbortReason(signal?: AbortSignal): Error | null {
     if (!signal?.aborted) {
       return null;
     }
 
-    return signal.reason ?? this.createAbortError();
+    const reason: unknown = signal.reason ?? this.createAbortError();
+    return reason instanceof Error ? reason : new Error(String(reason));
   }
 
   throwIfAborted(options?: FolderProcessingOptions): void {
@@ -174,7 +175,7 @@ export class BatchProcessor {
     let activeBytes = 0;
     let nextIndex = 0;
     let processedFiles = 0;
-    let firstError: unknown;
+    let firstError: Error | null = null;
 
     this.reportProgress(operation, 'preparing', folder.path, files.length, 0, options);
     this.throwIfAborted(options);
@@ -237,7 +238,7 @@ export class BatchProcessor {
               results.push(result);
             })
             .catch((error: unknown) => {
-              firstError = firstError ?? error;
+              firstError = firstError ?? (error instanceof Error ? error : new Error(String(error)));
             })
             .finally(() => {
               activeFiles -= 1;

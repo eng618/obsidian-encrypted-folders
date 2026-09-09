@@ -56,7 +56,7 @@ export class RemovalModal extends Modal {
       .addButton((btn) =>
         btn
           .setButtonText('Remove encryption')
-          .setWarning()
+          .setDestructive()
           .onClick(() => {
             void this.confirmRemoval();
           }),

@@ -2,7 +2,7 @@
   "id": "encrypted-folders",
   "name": "Encrypted Folders",
   "version": "1.7.0",
-  "minAppVersion": "1.10.0",
+  "minAppVersion": "1.13.0",
   "description": "Encrypt and decrypt entire folders within your vault with AES-256-GCM.",
   "author": "Eric N. Garcia",
   "authorUrl": "https://garciaericn.com",

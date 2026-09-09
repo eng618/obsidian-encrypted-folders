@@ -160,6 +160,14 @@ export class Modal {
   return el;
 };
 
+(HTMLElement.prototype as any).createDiv = function (options: Record<string, unknown> = {}) {
+  return (this as HTMLElement).createEl('div', options);
+};
+
+(HTMLElement.prototype as any).createSpan = function (options: Record<string, unknown> = {}) {
+  return (this as HTMLElement).createEl('span', options);
+};
+
 export class Setting {
   constructor(public containerEl: HTMLElement) {}
   setName(name: string) {
@@ -182,6 +190,7 @@ export class Setting {
       }),
       setCta: vi.fn(() => mockBtn),
       setWarning: vi.fn(() => mockBtn),
+      setDestructive: vi.fn(() => mockBtn),
       setTooltip: vi.fn(() => mockBtn),
       setDisabled: vi.fn(() => mockBtn),
       onClick: vi.fn((handler: () => void) => {

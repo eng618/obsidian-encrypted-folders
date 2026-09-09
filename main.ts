@@ -364,7 +364,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
       false,
       this.settings.maxPasswordAttempts,
     );
-    const onClose = modal.onClose.bind(modal);
+    const onClose = modal.onClose.bind(modal) as () => void;
     modal.onClose = () => {
       this.lockedFolderReprocessPrompts.delete(folderToReprocess.path);
       onClose();
@@ -399,9 +399,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
                     return await this.runWithProcessingModal('Unlocking folder', (options) =>
                       this.folderService.unlockFolder(folder, password, false, options),
                     );
-                  } catch (e) {
-                    console.error(e);
-                    throw e;
+                  } catch (e: unknown) {
+                    this.folderService.debug('Unlock folder failed', e);
+                    throw e instanceof Error ? e : new Error(String(e));
                   }
                 },
                 false,
@@ -423,9 +423,9 @@ export default class EncryptedFoldersPlugin extends Plugin {
                     return await this.runWithProcessingModal('Unlocking folder', (options) =>
                       this.folderService.unlockFolder(folder, recoveryKey, true, options),
                     );
-                  } catch (e) {
-                    console.error(e);
-                    throw e;
+                  } catch (e: unknown) {
+                    this.folderService.debug('Unlock with recovery key failed', e);
+                    throw e instanceof Error ? e : new Error(String(e));
                   }
                 },
                 false,
@@ -531,7 +531,8 @@ export default class EncryptedFoldersPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const loaded = (await this.loadData()) as Partial<EncryptedFoldersSettings> | null;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded ?? {});
     this.settings.autoLockWarningSeconds = Number.isFinite(this.settings.autoLockWarningSeconds)
       ? Math.max(0, Math.floor(this.settings.autoLockWarningSeconds))
       : DEFAULT_SETTINGS.autoLockWarningSeconds;
