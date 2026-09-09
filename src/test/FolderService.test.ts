@@ -776,4 +776,67 @@ describe('FolderService Integration', () => {
     expect(app.vault.getAbstractFileByPath('cancel-encrypt/a.md')).toBeDefined();
     expect(app.vault.getAbstractFileByPath('cancel-encrypt/b.md')).toBeDefined();
   });
+
+  it('should detect metadata tampering via MAC verification failure', async () => {
+    const folder = addFolder('tamper-test');
+    addFile(folder, 'secret.md', 'secret content');
+    await folderService.createEncryptedFolder(folder, 'mypassword', true);
+
+    const metaFile = app.vault.getAbstractFileByPath('tamper-test/obsidian-folder-meta.json') as TFile;
+    expect(metaFile).not.toBeNull();
+
+    const metaBuf = await app.vault.readBinary(metaFile);
+    const metaStr = new TextDecoder().decode(metaBuf);
+    const metadata = JSON.parse(metaStr);
+
+    // Tamper with iterations parameter
+    metadata.iterations = 1000;
+    await app.vault.modifyBinary(metaFile, new TextEncoder().encode(JSON.stringify(metadata, null, 2)).buffer);
+
+    const unlockResult = await folderService.unlockFolder(folder, 'mypassword');
+    expect(unlockResult).toBe(false);
+  });
+
+  it('should use atomic staging writes and leave original intact if staging fails', async () => {
+    const folder = addFolder('atomic-test');
+    const file = addFile(folder, 'note.md', 'important plaintext note');
+    const key = await encryptionService.generateMasterKey();
+
+    // Mock writeBinary to corrupt .locked.tmp writes
+    const originalWriteBinary = fileService.writeBinary.bind(fileService);
+    fileService.writeBinary = async (path: string, data: ArrayBuffer) => {
+      if (path.endsWith('.locked.tmp')) {
+        // Write corrupted bytes without MAGIC header
+        return originalWriteBinary(path, new TextEncoder().encode('BAD_HEADER').buffer);
+      }
+      return originalWriteBinary(path, data);
+    };
+
+    await expect(folderService.encryptFile(file, key)).rejects.toThrow('Staging write integrity check failed');
+    fileService.writeBinary = originalWriteBinary;
+
+    // Original file must remain intact!
+    expect(app.vault.getAbstractFileByPath('atomic-test/note.md')).not.toBeNull();
+    expect(app.vault.getAbstractFileByPath('atomic-test/note.md.locked')).toBeNull();
+  });
+
+  it('should continue decrypting valid files when an individual file is corrupted', async () => {
+    const folder = addFolder('partial-corrupt');
+    addFile(folder, 'good.md', 'good content');
+    addFile(folder, 'corrupt.md', 'corrupt content');
+
+    const key = await encryptionService.generateMasterKey();
+    await folderService.encryptFolderContents(folder, key);
+
+    // Corrupt one .locked file on disk
+    const corruptLocked = app.vault.getAbstractFileByPath('partial-corrupt/corrupt.md.locked') as TFile;
+    await app.vault.modifyBinary(corruptLocked, new TextEncoder().encode('ENC!invalid_ciphertext_bytes').buffer);
+
+    // Decrypt folder - should decrypt good.md successfully
+    await folderService.decryptFolderContents(folder, key);
+
+    expect(app.vault.getAbstractFileByPath('partial-corrupt/good.md')).not.toBeNull();
+    expect(app.vault.getAbstractFileByPath('partial-corrupt/good.md.locked')).toBeNull();
+    expect(app.vault.getAbstractFileByPath('partial-corrupt/corrupt.md.locked')).not.toBeNull();
+  });
 });

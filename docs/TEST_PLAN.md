@@ -95,6 +95,32 @@ Ensure the plugin core surface area is functional.
 3. Lock the folder.
 4. **Verification**: Use a disk hex editor or search for unique strings from the plaintext version in the raw disk sectors (advanced). Alternatively, verify that the file size matches the ciphertext structure, not the original plaintext.
 
+### Non-Extractable Key Verification
+
+1. Unlock an encrypted folder.
+2. In developer tools console, inspect `app.plugins.plugins['obsidian-encrypted-folders'].folderService.unlockedFolders`.
+3. **Verification**: Confirm that for any active `CryptoKey` object, `key.extractable` is `false`. Verify `window.crypto.subtle.exportKey('raw', key)` throws `InvalidAccessException`.
+
+### Metadata Integrity (HMAC Tamper Check)
+
+1. Lock an encrypted folder.
+2. Manually edit `obsidian-folder-meta.json` inside the locked folder (e.g. change `iterations` from 600000 to 1000).
+3. Attempt to unlock the folder using the correct password.
+4. **Verification**: Unlock is rejected with an authentication failure (`Authentication failed: Metadata tampering detected`), protecting against parameter tampering.
+
+### Atomic Staging Writes Check (.locked.tmp)
+
+1. Lock a folder containing notes.
+2. Verify that while encryption is in progress, files are temporarily staged as `.locked.tmp` files.
+3. If an interrupt or write failure occurs during staging, verify that the original plaintext note remains 100% intact on disk and no incomplete `.locked` file is generated.
+
+### Partial Decryption Resilience
+
+1. Lock a folder containing multiple notes.
+2. Manually corrupt the binary ciphertext of one `.locked` note on disk.
+3. Unlock the folder using your password.
+4. **Verification**: Valid notes are restored to plaintext successfully, while the corrupted `.locked` note is left untouched with an error notification logged, preventing total process failure.
+
 ### Session Security
 
 1. Unlock several folders.
@@ -171,3 +197,12 @@ Pass when all are true:
 - Console logs containing `[EncryptedFolders]` from both devices.
 - The affected folder's `obsidian-folder-meta.json` contents before and after failure.
 - File listing of that folder (`*.locked`, plaintext files, `README_ENCRYPTED.md`) on both devices.
+
+## 🧪 5. Property-Based & Fuzzing Automated Tests (`PropertyBasedCrypto.test.ts`)
+
+Run using `bun run test`:
+
+- **Property 1 (Cryptographic Invariance)**: Generates random byte arrays (0 to 5 KB) and passwords to verify 100% round-trip payload identity.
+- **Property 2 (Fuzzing Bit Corruption Rejection)**: Flips arbitrary bits in AES-256-GCM ciphertext buffers and verifies decryption throws clean errors without memory crashes.
+- **Property 3 (Fuzzing Truncated Ciphertext Rejection)**: Truncates random numbers of bytes from valid ciphertext payloads and verifies clean rejection.
+- **Property 4 (Path & Structural Generative Stress)**: Generates random deeply nested tree structures with special characters, spaces, and emojis (`🚀`, `🔒`) to verify batch processor stability.

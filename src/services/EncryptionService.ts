@@ -1,7 +1,7 @@
 export interface EncryptionResult {
   ciphertext: ArrayBuffer;
-  iv: Uint8Array;
-  salt: Uint8Array;
+  iv: Uint8Array<ArrayBuffer>;
+  salt: Uint8Array<ArrayBuffer>;
 }
 
 export interface DecryptionResult {
@@ -11,14 +11,17 @@ export interface DecryptionResult {
 export interface IEncryptionService {
   encrypt(data: ArrayBuffer, password: string): Promise<EncryptionResult>;
   decrypt(ciphertext: ArrayBuffer, password: string, iv: Uint8Array, salt: Uint8Array): Promise<ArrayBuffer>;
-  generateSalt(length?: number): Uint8Array;
-  generateIV(length?: number): Uint8Array;
+  generateSalt(length?: number): Uint8Array<ArrayBuffer>;
+  generateIV(length?: number): Uint8Array<ArrayBuffer>;
   deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>;
   encryptWithKey(data: BufferSource, key: CryptoKey): Promise<EncryptionResult>;
   decryptWithKey(ciphertext: BufferSource, key: CryptoKey, iv: BufferSource): Promise<ArrayBuffer>;
-  generateMasterKey(): Promise<CryptoKey>;
+  generateMasterKey(extractable?: boolean): Promise<CryptoKey>;
   exportKey(key: CryptoKey): Promise<ArrayBuffer>;
-  importKey(data: ArrayBuffer): Promise<CryptoKey>;
+  importKey(data: ArrayBuffer, extractable?: boolean): Promise<CryptoKey>;
+  deriveHmacKey(password: string, salt: Uint8Array): Promise<CryptoKey>;
+  computeHmac(key: CryptoKey, data: ArrayBuffer): Promise<ArrayBuffer>;
+  verifyHmac(key: CryptoKey, signature: ArrayBuffer, data: ArrayBuffer): Promise<boolean>;
 }
 
 export class EncryptionService implements IEncryptionService {
@@ -30,12 +33,12 @@ export class EncryptionService implements IEncryptionService {
     return new Uint8Array(view);
   }
 
-  generateSalt(length = 16): Uint8Array {
-    return window.crypto.getRandomValues(new Uint8Array(length));
+  generateSalt(length = 16): Uint8Array<ArrayBuffer> {
+    return new Uint8Array(window.crypto.getRandomValues(new Uint8Array(length)).buffer);
   }
 
-  generateIV(length = 12): Uint8Array {
-    return window.crypto.getRandomValues(new Uint8Array(length));
+  generateIV(length = 12): Uint8Array<ArrayBuffer> {
+    return new Uint8Array(window.crypto.getRandomValues(new Uint8Array(length)).buffer);
   }
 
   private async importPassword(password: string): Promise<CryptoKey> {
@@ -58,6 +61,30 @@ export class EncryptionService implements IEncryptionService {
       false,
       ['encrypt', 'decrypt'],
     );
+  }
+
+  async deriveHmacKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
+    const passwordKey = await this.importPassword(password);
+    return window.crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: this.toBufferView(salt),
+        iterations: this.ITERATIONS,
+        hash: this.DIGEST,
+      },
+      passwordKey,
+      { name: 'HMAC', hash: 'SHA-256', length: 256 },
+      false,
+      ['sign', 'verify'],
+    );
+  }
+
+  async computeHmac(key: CryptoKey, data: ArrayBuffer): Promise<ArrayBuffer> {
+    return window.crypto.subtle.sign('HMAC', key, data);
+  }
+
+  async verifyHmac(key: CryptoKey, signature: ArrayBuffer, data: ArrayBuffer): Promise<boolean> {
+    return window.crypto.subtle.verify('HMAC', key, signature, data);
   }
 
   async encryptWithKey(data: BufferSource, key: CryptoKey): Promise<EncryptionResult> {
@@ -103,19 +130,18 @@ export class EncryptionService implements IEncryptionService {
     return this.decryptWithKey(ciphertext, derivedKey, this.toBufferView(iv));
   }
 
-  async generateMasterKey(): Promise<CryptoKey> {
-    return window.crypto.subtle.generateKey(
-      { name: 'AES-GCM', length: this.KEY_LENGTH },
-      true, // extractable
-      ['encrypt', 'decrypt'],
-    );
+  async generateMasterKey(extractable = false): Promise<CryptoKey> {
+    return window.crypto.subtle.generateKey({ name: 'AES-GCM', length: this.KEY_LENGTH }, extractable, [
+      'encrypt',
+      'decrypt',
+    ]);
   }
 
   async exportKey(key: CryptoKey): Promise<ArrayBuffer> {
     return window.crypto.subtle.exportKey('raw', key);
   }
 
-  async importKey(data: ArrayBuffer): Promise<CryptoKey> {
-    return window.crypto.subtle.importKey('raw', data, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
+  async importKey(data: ArrayBuffer, extractable = false): Promise<CryptoKey> {
+    return window.crypto.subtle.importKey('raw', data, { name: 'AES-GCM' }, extractable, ['encrypt', 'decrypt']);
   }
 }

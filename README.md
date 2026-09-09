@@ -19,7 +19,8 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 - **Improved Data Integrity**: Encrypted files use a `.locked` extension, preventing Obsidian's indexer or third-party plugins from corrupting binary data by attempting "UTF-8 repairs."
 - **Informational Readme**: Automatically generates a `README_ENCRYPTED.md` in locked folders with clear instructions on how to unlock your data.
 - **Master Key Architecture**: Uses an encrypted Master Key (unwrapped by your password or a recovery key) for flexible access.
-- **Recovery Keys**: Generate a 32-character recovery key during setup to ensure you never lose access to your data.
+- **Recovery Keys & Safekeeping**: Generate a 32-character recovery key during setup with one-click clipboard copying, `.txt` backup downloads, and mandatory safekeeping confirmation.
+- **Transparent Setup Disclosure**: Displays a pre-encryption notice informing users that file contents are protected while filenames, titles, and directory structures remain unencrypted.
 - **Secure File Shredding**: Automatically overwrites plaintext files with secure random data before re-encrypting to prevent forensic disk recovery.
 - **Auto-Lock Security**: All folders are automatically re-encrypted and locked when the plugin is disabled or Obsidian is closed.
 - **Configurable Safeguards**: Lock unlocked folders automatically when Obsidian goes into the background or after a configurable period of per-folder inactivity, with an optional countdown warning.
@@ -27,11 +28,16 @@ A secure, recursive folder encryption plugin for Obsidian. Protect entire direct
 - **Exit Strategy**: Permanently remove encryption from a folder if you no longer need it, restoring files to normal plaintext Obsidian management.
 - **Integrity First**: Prevents nested encryption within already encrypted folders to ensure a simple, reliable vault structure.
 - **Sync-Safe State Tracking**: Lock and unlock operations are journaled in metadata to improve cross-device consistency during delayed or partial sync.
+- **Atomic Staging Writes**: Encrypts files to a `.locked.tmp` staging file and verifies ciphertext integrity _before_ shredding original plaintext notes, preventing data loss on process interrupts or disk failures.
 
 ## 🛡️ Security Specifications
 
 - **Algorithm**: AES-256-GCM (Authenticated Encryption with Associated Data).
 - **Key Derivation**: PBKDF2-SHA256 with **600,000 iterations**.
+- **Key Safety**: Master keys in memory are created as non-extractable (`extractable: false`), preventing raw key exfiltration by unmanaged code.
+- **Metadata Integrity**: Folders include HMAC signatures (`mac` and `recoveryMac`) to prevent disk-level metadata tampering (e.g., parameter alteration).
+- **Atomic Operations**: Staging writes (`.locked.tmp`) verify ciphertext headers and length on disk before removing original source files.
+- **Modular Service Architecture**: Decoupled core services (`MetadataManager`, `AutoLockManager`, `BatchProcessor`, `EncryptionService`) ensure strong separation of concerns, testability, and isolated security boundaries.
 - **Implementation**: Native [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API) for maximum speed and security.
 - **Zero-Knowledge**: Your master password and derived keys are never stored on disk.
 

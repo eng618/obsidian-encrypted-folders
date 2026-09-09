@@ -22,6 +22,7 @@ This document outlines the comprehensive development plan for implementing the "
 
 - [x] Define plugin architecture and data flow
 - [x] Design encryption service interface
+- [x] Decouple monolithic `FolderService` into modular sub-services (`MetadataManager`, `AutoLockManager`, `BatchProcessor`)
 - [x] Plan settings structure and configuration options
 - [x] Design folder state management system (UnlockedFolders map)
 
@@ -52,6 +53,8 @@ This document outlines the comprehensive development plan for implementing the "
 
 - [x] Create file reading/writing abstraction layer
 - [x] Implement batch file processing for folders
+- [x] Add atomic staging writes (`.locked.tmp`) with verification before shredding source files
+- [x] Add graceful error isolation for corrupted files during batch decryption
 - [x] Add progress tracking for large folder operations (Implicit in batch)
 - [x] Handle different file types appropriately
 
@@ -75,8 +78,9 @@ This document outlines the comprehensive development plan for implementing the "
 
 ### 3.2 Encryption/Decryption Modals
 
-- [x] Design password input modal with strength indicator
+- [x] Design password input modal with strength indicator & metadata disclosure disclaimer
 - [x] Create folder selection interface (Context menu based)
+- [x] Enhance recovery key modal with clipboard copy, `.txt` backup download, and mandatory confirmation
 - [x] Implement progress dialog for long operations (Notices)
 - [x] Add confirmation dialogs for destructive operations
 
@@ -94,7 +98,8 @@ This document outlines the comprehensive development plan for implementing the "
 - [ ] Implement secure password storage
 - [ ] Add two-factor authentication support
 - [x] Create emergency recovery mechanisms (Recovery Keys)
-- [x] Implement secure key management (Master Key Wrapping)
+- [x] Implement secure key management (Master Key Wrapping & Non-Extractable Session Keys)
+- [x] Add metadata integrity validation (HMAC signatures for mac/recoveryMac)
 
 ### 4.2 Performance Optimizations
 
@@ -131,9 +136,10 @@ This document outlines the comprehensive development plan for implementing the "
 ### 6.1 Unit Testing
 
 - [x] Create comprehensive test suite for encryption functions
-- [x] Test file processing edge cases
+- [x] Add generative property-based tests (`fast-check`) for cryptographic invariance
+- [x] Test file processing edge cases & unicode path handling
 - [x] Validate error handling scenarios
-- [ ] Test performance with large datasets
+- [x] Test performance with large datasets & deep folder structures
 
 ### 6.2 Integration Testing
 
@@ -145,8 +151,9 @@ This document outlines the comprehensive development plan for implementing the "
 ### 6.3 Security Testing
 
 - [x] Conduct security audit of encryption implementation
+- [x] Add fuzzing tests for bit corruption, random payload truncations, and invalid MAC signatures
 - [x] Test password strength validation (Added strength check)
-- [x] Verify secure key handling
+- [x] Verify secure key handling & non-extractable session keys
 - [x] Check for potential vulnerabilities (Addressed IV reuse for recovery)
 
 ## Phase 7: Documentation & Deployment

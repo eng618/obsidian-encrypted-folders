@@ -10,6 +10,7 @@ export class TFile {
 
 export class TFolder {
   path: string;
+  name: string;
   parent: TFolder;
   children: (TFile | TFolder)[];
 }
@@ -171,13 +172,24 @@ export class Setting {
     return this;
   }
   addButton(cb: (btn: Record<string, unknown>) => void) {
-    cb({
-      setButtonText: vi.fn().mockReturnThis(),
-      setCta: vi.fn().mockReturnThis(),
-      setWarning: vi.fn().mockReturnThis(),
-      setTooltip: vi.fn().mockReturnThis(),
-      onClick: vi.fn().mockReturnThis(),
-    });
+    const btnEl = (this.containerEl as any).createEl
+      ? (this.containerEl as any).createEl('button')
+      : document.createElement('button');
+    const mockBtn = {
+      setButtonText: vi.fn((text: string) => {
+        btnEl.textContent = text;
+        return mockBtn;
+      }),
+      setCta: vi.fn(() => mockBtn),
+      setWarning: vi.fn(() => mockBtn),
+      setTooltip: vi.fn(() => mockBtn),
+      setDisabled: vi.fn(() => mockBtn),
+      onClick: vi.fn((handler: () => void) => {
+        btnEl.onclick = handler;
+        return mockBtn;
+      }),
+    };
+    cb(mockBtn);
     return this;
   }
   addToggle(cb: (t: Record<string, unknown>) => void) {
@@ -235,6 +247,7 @@ export class App {
   vault: Vault;
   fileManager: {
     trashFile: (file: TFile | TFolder) => Promise<void>;
+    renameFile: (file: TFile | TFolder, newPath: string) => Promise<void>;
   };
   workspace: {
     on: (...args: any[]) => any;
@@ -249,6 +262,17 @@ export class App {
         if (file.parent) {
           file.parent.children = file.parent.children.filter((c) => c !== file);
         }
+      }),
+      renameFile: vi.fn(async (file: TFile | TFolder, newPath: string) => {
+        const normalized = normalizePath(newPath);
+        this.vault.files.delete(file.path);
+        if (file.parent) {
+          file.parent.children = file.parent.children.filter((c) => c !== file);
+        }
+        file.path = normalized;
+        const parts = normalized.split('/');
+        file.name = parts.pop() || '';
+        this.vault.files.set(normalized, file);
       }),
     };
     this.workspace = {
