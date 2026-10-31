@@ -1,4 +1,4 @@
-import { FolderMetadata } from '../models/FolderState';
+import type { FolderMetadata } from '../models/FolderState';
 import { EncryptionService } from '../services/EncryptionService';
 import { FileService } from '../services/FileService';
 import { MetadataManager, macsEqual } from '../services/MetadataManager';

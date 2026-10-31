@@ -1,4 +1,5 @@
-import { App, Notice, TFile, TFolder } from 'obsidian';
+import type { App, TFile} from 'obsidian';
+import { Notice, TFolder } from 'obsidian';
 
 import type { FolderService } from '../services/FolderService';
 import { PasswordModal } from '../ui/PasswordModal';

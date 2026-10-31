@@ -1,4 +1,5 @@
-import { Menu, TFile, TFolder } from 'obsidian';
+import type { Menu} from 'obsidian';
+import { TFile, TFolder } from 'obsidian';
 
 import type EncryptedFoldersPlugin from '../../main';
 import { scheduleExplorerIndicators } from '../ui/ExplorerIndicators';

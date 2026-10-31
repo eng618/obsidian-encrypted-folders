@@ -1,4 +1,5 @@
-import { App, Modal, Notice, Setting } from 'obsidian';
+import type { App} from 'obsidian';
+import { Modal, Notice, Setting } from 'obsidian';
 
 import { addPasswordToggle } from './UIUtils';
 

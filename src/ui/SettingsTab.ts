@@ -1,4 +1,5 @@
-import { App, Notice, PluginSettingTab, Setting, SettingDefinitionItem } from 'obsidian';
+import type { App, Setting, SettingDefinitionItem } from 'obsidian';
+import { Notice, PluginSettingTab } from 'obsidian';
 
 import type EncryptedFoldersPlugin from '../../main';
 import { describePasswordKind } from '../models/PasswordManagement';

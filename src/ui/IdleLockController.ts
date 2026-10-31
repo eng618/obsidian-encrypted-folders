@@ -1,4 +1,5 @@
-import { App, Notice } from 'obsidian';
+import type { App} from 'obsidian';
+import { Notice } from 'obsidian';
 
 import type { FolderService, IdleLockCountdown } from '../services/FolderService';
 

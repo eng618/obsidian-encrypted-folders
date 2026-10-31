@@ -1,4 +1,5 @@
-import { MasterPasswordRecord, isMasterPasswordRecord } from './PasswordManagement';
+import type { MasterPasswordRecord} from './PasswordManagement';
+import { isMasterPasswordRecord } from './PasswordManagement';
 
 export interface EncryptedFoldersSettings {
   autoLockOnBackground: boolean;

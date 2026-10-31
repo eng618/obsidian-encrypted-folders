@@ -1,6 +1,7 @@
-import { App, Modal, Setting } from 'obsidian';
+import type { App} from 'obsidian';
+import { Modal, Setting } from 'obsidian';
 
-import { FolderProcessingProgress } from '../services/BatchProcessor';
+import type { FolderProcessingProgress } from '../services/BatchProcessor';
 
 export class ProcessingModal extends Modal {
   private statusEl: HTMLElement | null = null;

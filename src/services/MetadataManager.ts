@@ -1,8 +1,9 @@
-import { TFolder, normalizePath } from 'obsidian';
+import type { TFolder} from 'obsidian';
+import { normalizePath } from 'obsidian';
 
-import { FolderLifecycleState, FolderMetadata } from '../models/FolderState';
-import { EncryptionService } from './EncryptionService';
-import { FileService } from './FileService';
+import type { FolderLifecycleState, FolderMetadata } from '../models/FolderState';
+import type { EncryptionService } from './EncryptionService';
+import type { FileService } from './FileService';
 
 export class MetadataManager {
   private readonly META_FILE_NAME = 'obsidian-folder-meta.json';

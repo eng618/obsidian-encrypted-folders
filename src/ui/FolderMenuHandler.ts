@@ -1,6 +1,8 @@
-import { App, Menu, Notice, TFolder } from 'obsidian';
+import type { App, Menu, TFolder } from 'obsidian';
+import { Notice } from 'obsidian';
 
-import { describePasswordKind, FolderPasswordKind } from '../models/PasswordManagement';
+import type { FolderPasswordKind } from '../models/PasswordManagement';
+import { describePasswordKind } from '../models/PasswordManagement';
 import type { EncryptedFoldersSettings } from '../models/Settings';
 import type { FolderService } from '../services/FolderService';
 import { isAbortError } from '../utils/abort';

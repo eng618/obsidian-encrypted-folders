@@ -1,4 +1,5 @@
-import { TAbstractFile, TFile, Vault, normalizePath } from 'obsidian';
+import type { TAbstractFile, Vault} from 'obsidian';
+import { TFile, normalizePath } from 'obsidian';
 
 export class FileService {
   private readonly MAX_RANDOM_SIZE = 65536;

@@ -1,18 +1,23 @@
-import { App, TFile, TFolder, normalizePath } from 'obsidian';
+import type { App, TFile} from 'obsidian';
+import { TFolder, normalizePath } from 'obsidian';
 
-import { FolderLifecycleState, FolderMetadata } from '../models/FolderState';
-import {
+import type { FolderLifecycleState, FolderMetadata } from '../models/FolderState';
+import type {
   FolderPasswordKind,
+  MasterPasswordRecord} from '../models/PasswordManagement';
+import {
   MASTER_KDF_ITERATIONS,
   MASTER_VERIFIER_PHRASE,
-  MasterPasswordRecord,
   sanitizePasswordLabel,
   validateCustomPasswordLabel,
 } from '../models/PasswordManagement';
-import { AutoLockManager, AutoLockSettings, IdleLockCountdown } from './AutoLockManager';
-import { BatchProcessor, FolderProcessingOptions } from './BatchProcessor';
-import { EncryptionService, KeyDerivationCache } from './EncryptionService';
-import { FileService } from './FileService';
+import type { AutoLockSettings, IdleLockCountdown } from './AutoLockManager';
+import { AutoLockManager } from './AutoLockManager';
+import type { FolderProcessingOptions } from './BatchProcessor';
+import { BatchProcessor } from './BatchProcessor';
+import type { EncryptionService} from './EncryptionService';
+import { KeyDerivationCache } from './EncryptionService';
+import type { FileService } from './FileService';
 import { MetadataManager } from './MetadataManager';
 import { bucketCount, type TelemetrySink } from './TelemetryService';
 
@@ -900,7 +905,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
         unrestored.length > 0
           ? ` Could not restore: ${unrestored.join(', ')}. The recovery key still opens those folders.`
           : ' Folder wraps were restored.';
-      throw new Error(`Master password was not changed.${restoreNote} Settings save failed: ${reason}`);
+      throw new Error(`Master password was not changed.${restoreNote} Settings save failed: ${reason}`, { cause: error });
     }
 
     const cleanup = await this.clearCommittedPreviousWraps();
@@ -1468,7 +1473,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
         `  IV Length: ${iv?.byteLength ?? 0}\n` +
         `  Ciphertext Length: ${ciphertext?.byteLength ?? 0}`;
       this.debug(errorMsg);
-      throw new Error(errorMsg);
+      throw new Error(errorMsg, { cause: error });
     }
   }
 

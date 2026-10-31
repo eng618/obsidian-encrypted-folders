@@ -1,4 +1,4 @@
-import { Setting, TextComponent } from 'obsidian';
+import type { Setting, TextComponent } from 'obsidian';
 
 /**
  * Adds a password visibility toggle button to a Setting component.
