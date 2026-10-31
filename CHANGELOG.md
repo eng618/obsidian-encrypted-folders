@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.7.3](https://github.com/eng618/obsidian-encrypted-folders/compare/1.7.2...1.7.3) (2026-10-31)
+
+
+### Features
+
+* Add optional vault-wide master password and custom password labels ([94f734b](https://github.com/eng618/obsidian-encrypted-folders/commit/94f734b7fb5d8f5b267c96eceeb3beac44ede258))
+* Add rollback-safe master password rotation and prevent unsafe key removal ([3f607b1](https://github.com/eng618/obsidian-encrypted-folders/commit/3f607b1438463541f372d80fceb57c0774138cd2))
+
+
+### Code Refactoring
+
+* Enable isolated modules and type-only imports for cleaner builds ([b72e49b](https://github.com/eng618/obsidian-encrypted-folders/commit/b72e49bcee17bd4322582b18b2f220ad4704ecfb))
+* Migrate linting and formatting from eslint and prettier to oxlint and oxfmt ([c01cdc2](https://github.com/eng618/obsidian-encrypted-folders/commit/c01cdc20340d9197ca2519b1908d97f2b146866e))
+* Update codebase for oxlint compliance and type safety improvements ([de7951b](https://github.com/eng618/obsidian-encrypted-folders/commit/de7951b0ab00aee3343ef97434c1b6bd8037593e))
+
+
+### Styles
+
+* Add blank line after import statements across codebase ([d83e80d](https://github.com/eng618/obsidian-encrypted-folders/commit/d83e80d2eb78a980af28eec2d3d70aafb71a8ee8))
+
+
+### Miscellaneous Chores
+
+* Add oxfmt unmatched pattern flag and increase test timeout ([4e0450c](https://github.com/eng618/obsidian-encrypted-folders/commit/4e0450cb023a9f85e98963ee4a654c7b397a69b7))
+
 ## [1.7.2](https://github.com/eng618/obsidian-encrypted-folders/compare/1.7.1...1.7.2) (2026-09-09)
 
 
