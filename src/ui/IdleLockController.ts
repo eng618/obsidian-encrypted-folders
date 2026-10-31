@@ -1,5 +1,7 @@
-import { App, Notice } from 'obsidian';
+import type { App } from 'obsidian';
+
 import type { FolderService, IdleLockCountdown } from '../services/FolderService';
+import { showNotice } from './UIUtils';
 
 export class IdleLockController {
   private readonly autoLockCheckIntervalMs = 1000;
@@ -38,7 +40,7 @@ export class IdleLockController {
 
     const locked = await this.folderService.runBackgroundAutoLock();
     if (locked) {
-      new Notice('Unlocked folders were locked because Obsidian entered the background.');
+      showNotice('Unlocked folders were locked because Obsidian entered the background.');
     }
   }
 
@@ -58,7 +60,7 @@ export class IdleLockController {
     const locked = await this.folderService.runIdleAutoLock();
     if (locked) {
       this.updateCountdownStatus(this.folderService.getNextIdleLockCountdown());
-      new Notice('Inactive unlocked folders were locked automatically.');
+      showNotice('Inactive unlocked folders were locked automatically.');
     }
   }
 
@@ -116,7 +118,7 @@ export class IdleLockController {
     }
 
     this.warningKeys.add(warningKey);
-    new Notice(
+    showNotice(
       `Folder "${countdown.folderPath}" will lock in ${formatCountdown(countdown.remainingMs)} due to inactivity.`,
     );
   }

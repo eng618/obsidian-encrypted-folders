@@ -49,7 +49,9 @@ describe('EncryptionService', () => {
 
     const result = await service.encrypt(data, password);
 
-    await expect(service.decrypt(result.ciphertext, wrongPassword, result.iv, result.salt)).rejects.toThrow();
+    await expect(service.decrypt(result.ciphertext, wrongPassword, result.iv, result.salt)).rejects.toThrow(
+      /operation failed/i,
+    );
   });
 
   test('should generate master key and export/import it', async () => {
@@ -67,7 +69,7 @@ describe('EncryptionService', () => {
   test('should generate non-extractable master key by default', async () => {
     const masterKey = await service.generateMasterKey();
     expect(masterKey.extractable).toBe(false);
-    await expect(service.exportKey(masterKey)).rejects.toThrow();
+    await expect(service.exportKey(masterKey)).rejects.toThrow(/not extractable/i);
   });
 
   test('deriveSecretKeys splits one KDF into independent encryption and MAC keys', async () => {
@@ -84,8 +86,9 @@ describe('EncryptionService', () => {
     expect(await service.verifyHmac(hmacKey, mac, payload)).toBe(true);
 
     // Keys are domain-separated: cross-use must fail.
-    await expect(service.computeHmac(encryptionKey, payload)).rejects.toThrow();
-    await expect(service.encryptWithKey(data, hmacKey)).rejects.toThrow();
+    const wrongKeyUsage = /unable to use this key|algorithm mismatch|not valid for the provided key/i;
+    await expect(service.computeHmac(encryptionKey, payload)).rejects.toThrow(wrongKeyUsage);
+    await expect(service.encryptWithKey(data, hmacKey)).rejects.toThrow(wrongKeyUsage);
   });
 
   test('KeyDerivationCache reuses derivations within a session and clears on demand', async () => {

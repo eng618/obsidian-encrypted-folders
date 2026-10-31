@@ -1,4 +1,4 @@
-import { FolderMetadata } from '../models/FolderState';
+import type { FolderMetadata } from '../models/FolderState';
 import { EncryptionService } from '../services/EncryptionService';
 import { FileService } from '../services/FileService';
 import { MetadataManager, macsEqual } from '../services/MetadataManager';
@@ -55,7 +55,8 @@ describe('MetadataManager', () => {
 
     expect(readMeta).not.toBeNull();
     expect(readMeta?.id).toBe('test-id-123');
-    expect(readMeta?.schemaVersion).toBe(2);
+    expect(readMeta?.schemaVersion).toBe(3);
+    expect(readMeta?.passwordKind).toBe('custom');
   });
 
   test('should compute and verify metadata MAC signature', async () => {
@@ -152,6 +153,48 @@ describe('MetadataManager', () => {
     };
     const next = await metadataManager.transitionMetadataState(folder as any, meta, 'error', 'x'.repeat(2000));
     expect(next.lastError?.length).toBeLessThanOrEqual(500);
+  });
+
+  test('should validate passwordKind and passwordLabel on v3 metadata', () => {
+    const valid: FolderMetadata = {
+      version: 2,
+      schemaVersion: 3,
+      id: 'kind-id',
+      encryptionMethod: 'AES-256-GCM',
+      kdfMethod: 'PBKDF2-SHA256',
+      salt: 'c2FsdA==',
+      iterations: 600000,
+      lockFile: 'obsidian-folder-meta.json',
+      testToken: 'dG9rZW4=',
+      wrappedMasterKey: 'd3JhcHBlZA==',
+      masterKeyIV: 'aXY=',
+      passwordKind: 'custom',
+      passwordLabel: 'Banking docs',
+    };
+    expect(() => metadataManager.parseMetadata(JSON.stringify(valid))).not.toThrow();
+    expect(() => metadataManager.parseMetadata(JSON.stringify({ ...valid, passwordKind: 'shared' }))).toThrow(
+      /passwordKind/,
+    );
+    expect(() => metadataManager.parseMetadata(JSON.stringify({ ...valid, passwordLabel: '' }))).toThrow(
+      /passwordLabel/,
+    );
+    expect(() => metadataManager.parseMetadata(JSON.stringify({ ...valid, passwordLabel: 'x'.repeat(81) }))).toThrow(
+      /passwordLabel/,
+    );
+    expect(() => metadataManager.parseMetadata(JSON.stringify({ ...valid, previousSalt: 'c2FsdA==' }))).toThrow(
+      /previousWrappedMasterKey/,
+    );
+    expect(() =>
+      metadataManager.parseMetadata(
+        JSON.stringify({
+          ...valid,
+          previousSalt: 'c2FsdA==',
+          previousWrappedMasterKey: 'd3JhcHBlZA==',
+          previousMasterKeyIV: 'aXY=',
+          previousIterations: 600000,
+        }),
+      ),
+    ).not.toThrow();
   });
 
   test('macsEqual compares in constant time and fails closed', () => {

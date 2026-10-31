@@ -1,15 +1,17 @@
+import type { TFile as ObsidianTFile, Vault as ObsidianVault } from 'obsidian';
+
 import { FileService } from '../services/FileService';
 import { TFile, TFolder, Vault } from './mocks/obsidian';
 
 describe('FileService', () => {
   let vault: Vault;
   let fileService: FileService;
-  let trashFile: (file: import('obsidian').TFile) => Promise<void>;
+  let trashFile: (file: ObsidianTFile) => Promise<void>;
 
   beforeEach(() => {
     vault = new Vault();
-    trashFile = vi.fn<(file: import('obsidian').TFile) => Promise<void>>(async () => {});
-    fileService = new FileService(vault as unknown as import('obsidian').Vault, trashFile);
+    trashFile = vi.fn<(file: ObsidianTFile) => Promise<void>>(async () => {});
+    fileService = new FileService(vault as unknown as ObsidianVault, trashFile);
     vi.clearAllMocks();
   });
 
@@ -22,7 +24,7 @@ describe('FileService', () => {
       file.data = testData;
       file.stat = { size: testData.byteLength, mtime: Date.now(), ctime: Date.now() };
 
-      const result = await fileService.readBinary(file as unknown as import('obsidian').TFile);
+      const result = await fileService.readBinary(file as unknown as ObsidianTFile);
 
       expect(vault.readBinary).toHaveBeenCalledWith(file);
       expect(result).toBe(testData);
@@ -65,13 +67,13 @@ describe('FileService', () => {
       vault.createBinary.mockRejectedValueOnce(new Error('File already exists'));
       // Add adapter mock for this edge case
       (vault as unknown as { adapter: { writeBinary: ReturnType<typeof vi.fn> } }).adapter = {
-        writeBinary: vi.fn(),
+        writeBinary: vi.fn<(path: string, data: ArrayBuffer) => Promise<void>>(),
       };
 
       const testData = new Uint8Array([1, 2, 3]).buffer;
 
       // This should attempt adapter write and then fail to find file
-      await expect(fileService.writeBinary('somefolder', testData)).rejects.toThrow();
+      await expect(fileService.writeBinary('somefolder', testData)).rejects.toThrow(/already exists/);
     });
   });
 
@@ -107,7 +109,7 @@ describe('FileService', () => {
       file.name = 'todelete.txt';
       file.stat = { size: 0, mtime: Date.now(), ctime: Date.now() };
 
-      await fileService.deleteFile(file as unknown as import('obsidian').TFile);
+      await fileService.deleteFile(file as unknown as ObsidianTFile);
 
       expect(trashFile).toHaveBeenCalledWith(file);
     });
@@ -120,7 +122,7 @@ describe('FileService', () => {
       file.name = 'toshred.txt';
       file.stat = { size: 100, mtime: Date.now(), ctime: Date.now() };
 
-      await fileService.shredFile(file as unknown as import('obsidian').TFile);
+      await fileService.shredFile(file as unknown as ObsidianTFile);
 
       expect(vault.modifyBinary).toHaveBeenCalled();
       expect(trashFile).toHaveBeenCalledWith(file);
@@ -132,7 +134,7 @@ describe('FileService', () => {
       file.name = 'largefile.bin';
       file.stat = { size: 100000, mtime: Date.now(), ctime: Date.now() }; // Large file
 
-      await fileService.shredFile(file as unknown as import('obsidian').TFile);
+      await fileService.shredFile(file as unknown as ObsidianTFile);
 
       expect(vault.modifyBinary).toHaveBeenCalled();
       // Verify the data passed has the correct size

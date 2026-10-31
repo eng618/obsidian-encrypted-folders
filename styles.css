@@ -32,6 +32,27 @@
   font-size: 0.9em;
 }
 
+.password-kind-badge {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--background-secondary-alt);
+  border: 1px solid var(--interactive-accent);
+  color: var(--text-normal);
+  font-size: 0.8em;
+  font-weight: 600;
+}
+
+.password-kind-helper,
+.password-master-info,
+.password-master-missing {
+  color: var(--text-muted);
+  font-size: 0.85em;
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
+
 .recovery-key-container {
   padding: 15px;
   margin: 20px 0;

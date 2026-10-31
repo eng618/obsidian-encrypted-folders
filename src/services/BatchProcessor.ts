@@ -26,6 +26,14 @@ export class BatchProcessor {
 
   constructor(private protectedFileNames: readonly string[] = []) {}
 
+  private takeFolder(stack: TFolder[]): TFolder {
+    const current = stack.pop();
+    if (current === undefined) {
+      throw new Error('Folder walk unexpectedly found an empty stack.');
+    }
+    return current;
+  }
+
   isProtectedFile(file: TFile): boolean {
     return this.protectedFileNames.includes(file.name);
   }
@@ -35,7 +43,7 @@ export class BatchProcessor {
     let count = 0;
 
     while (stack.length > 0) {
-      const current = stack.pop()!;
+      const current = this.takeFolder(stack);
       const children = [...current.children];
       for (const child of children) {
         if (child instanceof TFolder) {
@@ -57,7 +65,7 @@ export class BatchProcessor {
     const files: TFile[] = [];
 
     while (stack.length > 0) {
-      const current = stack.pop()!;
+      const current = this.takeFolder(stack);
       const children = [...current.children];
       for (const child of children) {
         if (child instanceof TFolder) {
@@ -91,7 +99,7 @@ export class BatchProcessor {
     const files: TFile[] = [];
 
     while (stack.length > 0) {
-      const current = stack.pop()!;
+      const current = this.takeFolder(stack);
       const children = [...current.children];
       for (const child of children) {
         if (child instanceof TFolder) {
@@ -224,7 +232,10 @@ export class BatchProcessor {
           return;
         }
 
-        while (!firstError && nextIndex < files.length && activeFiles < maxConcurrentFiles) {
+        while (nextIndex < files.length && activeFiles < maxConcurrentFiles) {
+          if (firstError) {
+            break;
+          }
           const file = files[nextIndex];
           const fileSize = this.getFileProcessingSize(file);
           const canRunWithActiveBytes = activeBytes + fileSize <= maxConcurrentBytes;

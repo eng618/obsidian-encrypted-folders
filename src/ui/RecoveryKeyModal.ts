@@ -1,4 +1,5 @@
-import { App, ButtonComponent, Modal, Setting } from 'obsidian';
+import type { App, ButtonComponent} from 'obsidian';
+import { Modal, Setting } from 'obsidian';
 
 export class RecoveryKeyModal extends Modal {
   constructor(

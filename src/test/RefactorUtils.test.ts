@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { DEFAULT_SETTINGS, sanitizeSettings } from '../models/Settings';
 import { getIndicatorClass } from '../ui/ExplorerIndicators';
 import { formatCountdown, getWarningKey } from '../ui/IdleLockController';

@@ -1,4 +1,5 @@
-import { Notice, Platform, Plugin } from 'obsidian';
+import { Platform, Plugin } from 'obsidian';
+
 import { registerEventSubscriptions } from './src/events/EventSubscriptions';
 import type { EncryptedFoldersSettings } from './src/models/Settings';
 import { DEFAULT_SETTINGS, ensureTelemetryId, sanitizeSettings } from './src/models/Settings';
@@ -12,6 +13,7 @@ import { updateExplorerIndicators } from './src/ui/ExplorerIndicators';
 import { IdleLockController } from './src/ui/IdleLockController';
 import { runWithProcessingModal } from './src/ui/ProcessingRunner';
 import { EncryptedFoldersSettingTab } from './src/ui/SettingsTab';
+import { showNotice } from './src/ui/UIUtils';
 
 export type { EncryptedFoldersSettings };
 
@@ -45,6 +47,13 @@ export default class EncryptedFoldersPlugin extends Plugin {
     this.fileService = new FileService(this.app.vault, (file) => this.app.fileManager.trashFile(file));
     this.folderService = new FolderService(this.encryptionService, this.fileService, this.app, {
       telemetry: this.telemetryService,
+      masterPasswordStore: {
+        load: () => this.settings.masterPassword ?? null,
+        save: async (record) => {
+          this.settings.masterPassword = record;
+          await this.saveData(this.settings);
+        },
+      },
     });
     this.folderService.setDebugLogging(this.settings.debugLogging);
     this.folderService.setAutoLockSettings({
@@ -91,7 +100,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
     await runWithProcessingModal(this.app, 'Locking folder', (options) =>
       this.folderService.lockFolder(folder, options),
     );
-    new Notice('Folder locked.');
+    showNotice('Folder locked.');
   }
 
   async lockFolderWithProgress(
@@ -126,7 +135,7 @@ export default class EncryptedFoldersPlugin extends Plugin {
     }
     this.settings.telemetryNoticeSeen = true;
     await this.saveData(this.settings);
-    new Notice(
+    showNotice(
       'Anonymous usage statistics are collected to improve this plugin. No vault paths, filenames, or contents are ever collected. You can opt out in the plugin settings.',
       12000,
     );

@@ -1,5 +1,12 @@
-import { App, Notice, PluginSettingTab, Setting, SettingDefinitionItem } from 'obsidian';
+import type { App, Setting, SettingDefinitionItem } from 'obsidian';
+import { PluginSettingTab } from 'obsidian';
+
 import type EncryptedFoldersPlugin from '../../main';
+import { describePasswordKind } from '../models/PasswordManagement';
+import type { FolderPasswordSummary } from '../services/FolderService';
+import { PasswordModal } from './PasswordModal';
+import { RecoveryKeyModal } from './RecoveryKeyModal';
+import { showNotice } from './UIUtils';
 
 type SettingsKey =
   | 'autoLockOnBackground'
@@ -19,6 +26,70 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
 
   getSettingDefinitions(): SettingDefinitionItem[] {
     return [
+      {
+        name: 'Master password',
+        desc: 'Optional default password for folders. Folders encrypted with it show a Master password badge; others use titled custom passwords.',
+      },
+      {
+        name: 'Master password status',
+        render: (setting: Setting) => {
+          const record = this.plugin.settings.masterPassword;
+          if (record) {
+            const updated = new Date(record.updatedAt).toLocaleDateString();
+            setting.setDesc(`Set — last changed ${updated}. One recovery key covers every master folder.`);
+          } else {
+            setting.setDesc('Not set. Each folder currently needs its own custom password.');
+          }
+        },
+      },
+      {
+        name: 'Set up master password',
+        desc: 'Choose a master password. You will receive one recovery key covering every master folder.',
+        visible: () => !this.plugin.settings.masterPassword,
+        action: () => {
+          this.openMasterSetup();
+        },
+      },
+      {
+        name: 'Change master password',
+        desc: 'Re-wraps every master folder at once. Folders may stay locked; file contents are untouched.',
+        visible: () => !!this.plugin.settings.masterPassword,
+        action: () => {
+          this.openMasterChange();
+        },
+      },
+      {
+        name: 'Remove master password',
+        desc: 'Only available once no folder uses it. Convert master folders to custom passwords first.',
+        visible: () => !!this.plugin.settings.masterPassword,
+        action: () => {
+          this.openMasterRemove();
+        },
+      },
+      {
+        name: 'Folders and passwords',
+        desc: 'Which password protects each folder. Right-click (or long-press) a folder for switch, change, and rename actions.',
+        render: (setting: Setting) => {
+          const summaries = this.cachedFolderSummaries;
+          if (summaries.length === 0) {
+            setting.setDesc('No encrypted folders yet.');
+            return;
+          }
+          const lines = summaries.map((s) =>
+            s.kind === 'master'
+              ? `🔑 ${s.path} — Master password`
+              : `🔒 ${s.path} — ${describePasswordKind(s.kind, s.label)}`,
+          );
+          setting.setDesc(lines.join('\n'));
+        },
+      },
+      {
+        name: 'Refresh folder list',
+        desc: 'Re-read folder metadata for the list above.',
+        action: () => {
+          void this.refreshFolderSummaries();
+        },
+      },
       {
         name: 'Security actions',
         desc: 'Immediately lock all currently unlocked folders.',
@@ -151,11 +222,114 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
 
   private async lockAllFolders(): Promise<void> {
     await this.plugin.lockAllFoldersWithProgress();
-    new Notice('All folders locked.');
+    showNotice('All folders locked.');
   }
 
   private async runEncryptedFolderScan(): Promise<void> {
     await this.plugin.folderService.syncFolders(3, 300, true);
-    new Notice('Encrypted folder scan complete.');
+    showNotice('Encrypted folder scan complete.');
+  }
+
+  private cachedFolderSummaries: FolderPasswordSummary[] = [];
+
+  private async refreshFolderSummaries(): Promise<void> {
+    try {
+      this.cachedFolderSummaries = await this.plugin.folderService.listFolderPasswordKinds();
+    } catch {
+      this.cachedFolderSummaries = [];
+    }
+    showNotice('Folder list refreshed.');
+  }
+
+  private openMasterSetup(): void {
+    new PasswordModal(
+      this.app,
+      'Set up master password',
+      async (password) => {
+        try {
+          const recoveryKey = await this.plugin.folderService.setupMasterPassword(password);
+          new RecoveryKeyModal(this.app, recoveryKey).open();
+          showNotice('Master password set. New folders will use it by default.');
+          return true;
+        } catch (e) {
+          throw e instanceof Error ? e : new Error(String(e));
+        }
+      },
+      false,
+      this.plugin.settings.maxPasswordAttempts,
+      {
+        badge: 'Master password',
+        helperText:
+          'This becomes the default password for folders. You will receive one recovery key for all master folders.',
+      },
+    ).open();
+  }
+
+  private openMasterChange(): void {
+    new PasswordModal(
+      this.app,
+      'Verify current master password',
+      async (oldPassword) => {
+        const valid = await this.plugin.folderService.verifyMasterPassword(oldPassword);
+        if (!valid) {
+          return false;
+        }
+        new PasswordModal(
+          this.app,
+          'New master password',
+          async (newPassword) => {
+            try {
+              const { rotated, total, previousWrapsRemaining } = await this.plugin.folderService.changeMasterPassword(
+                oldPassword,
+                newPassword,
+              );
+              const changed =
+                total === 0
+                  ? 'Master password changed.'
+                  : `Master password changed. ${rotated} of ${total} folders re-wrapped.`;
+              showNotice(
+                previousWrapsRemaining > 0
+                  ? `${changed} Backup wraps remain and will be cleared on the next folder sync.`
+                  : changed,
+              );
+              return true;
+            } catch (e) {
+              throw e instanceof Error ? e : new Error(String(e));
+            }
+          },
+          false,
+          this.plugin.settings.maxPasswordAttempts,
+          { badge: 'Master password' },
+        ).open();
+        return true;
+      },
+      false,
+      this.plugin.settings.maxPasswordAttempts,
+      { badge: 'Master password' },
+    ).open();
+  }
+
+  private openMasterRemove(): void {
+    new PasswordModal(
+      this.app,
+      'Verify to remove master password',
+      async (password) => {
+        try {
+          await this.plugin.folderService.removeMasterPassword(password);
+          showNotice('Master password removed.');
+          return true;
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e);
+          if (/Incorrect master password|Authentication failed/i.test(message)) {
+            return false;
+          }
+          showNotice(message);
+          return true;
+        }
+      },
+      false,
+      this.plugin.settings.maxPasswordAttempts,
+      { badge: 'Master password' },
+    ).open();
   }
 }

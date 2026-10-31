@@ -1,4 +1,5 @@
 import { App, TFile, TFolder } from 'obsidian';
+
 import { EncryptionService } from '../services/EncryptionService';
 import { FileService } from '../services/FileService';
 import { FolderService } from '../services/FolderService';
@@ -106,10 +107,11 @@ describe('FolderService Integration', () => {
     // Check file is decrypted and renamed back
     const decryptedFile = getOptionalTFile('secret/note.md');
     expect(decryptedFile).not.toBeNull();
-    if (decryptedFile) {
-      const decryptedData = await app.vault.readBinary(decryptedFile);
-      expect(new TextDecoder().decode(decryptedData)).toBe('my secret');
+    if (!decryptedFile) {
+      throw new Error('Expected decrypted file at secret/note.md');
     }
+    const decryptedData = await app.vault.readBinary(decryptedFile);
+    expect(new TextDecoder().decode(decryptedData)).toBe('my secret');
   });
 
   test('should pay one PBKDF2 per secret on create and unlock (split KDF)', async () => {
@@ -641,12 +643,7 @@ describe('FolderService Integration', () => {
       return originalRenameFile(file, newPath);
     };
 
-    try {
-      await folderService.createEncryptedFolder(folder, password, true);
-      expect('should have failed').toBe('failed');
-    } catch (e) {
-      expect(e).toBeDefined();
-    }
+    await expect(folderService.createEncryptedFolder(folder, password, true)).rejects.toThrow(/Disk full or crash/);
 
     // Restore original renameFile for verification
     fileService.renameFile = originalRenameFile;
@@ -654,18 +651,18 @@ describe('FolderService Integration', () => {
     // File 1 should have been rolled back to plaintext
     const restoredFile1 = getOptionalTFile('rollback-test/note1.md');
     expect(restoredFile1).not.toBeNull();
-    if (restoredFile1) {
-      const data = await app.vault.readBinary(restoredFile1);
-      expect(new TextDecoder().decode(data)).toBe('content 1');
+    if (!restoredFile1) {
+      throw new Error('Expected restored file at rollback-test/note1.md');
     }
+    expect(new TextDecoder().decode(await app.vault.readBinary(restoredFile1))).toBe('content 1');
 
     // File 2 should still be plaintext (never encrypted)
     const restoredFile2 = getOptionalTFile('rollback-test/note2.md');
     expect(restoredFile2).not.toBeNull();
-    if (restoredFile2) {
-      const data = await app.vault.readBinary(restoredFile2);
-      expect(new TextDecoder().decode(data)).toBe('content 2');
+    if (!restoredFile2) {
+      throw new Error('Expected restored file at rollback-test/note2.md');
     }
+    expect(new TextDecoder().decode(await app.vault.readBinary(restoredFile2))).toBe('content 2');
 
     // No .locked files should remain
     expect(app.vault.getAbstractFileByPath('rollback-test/note1.md.locked')).toBeNull();
@@ -963,6 +960,25 @@ describe('FolderService Integration', () => {
     const metadata = JSON.parse(metaStr);
     expect(metadata.state).toBe('unlocked');
     expect(metadata.lastError).toMatch(/Partial decrypt/);
+  });
+
+  it('should keep metadata when removal is attempted with locked files remaining', async () => {
+    const folder = addFolder('partial-remove');
+    addFile(folder, 'good.md', 'good content');
+    addFile(folder, 'bad.md', 'bad content');
+    await folderService.createEncryptedFolder(folder, 'password123', true);
+
+    const corruptLocked = app.vault.getAbstractFileByPath('partial-remove/bad.md.locked') as TFile;
+    await app.vault.modifyBinary(corruptLocked, new TextEncoder().encode('ENC!invalid_ciphertext_bytes').buffer);
+
+    await expect(folderService.removeEncryption(folder, 'password123')).rejects.toThrow(/encrypted file/);
+    expect(folderService.isEncryptedFolder(folder)).toBe(true);
+    expect(app.vault.getAbstractFileByPath('partial-remove/obsidian-folder-meta.json')).not.toBeNull();
+    expect(app.vault.getAbstractFileByPath('partial-remove/bad.md.locked')).not.toBeNull();
+    expect(app.vault.getAbstractFileByPath('partial-remove/good.md')).not.toBeNull();
+
+    await expect(folderService.removeEncryption(folder)).rejects.toThrow(/encrypted file/);
+    expect(app.vault.getAbstractFileByPath('partial-remove/obsidian-folder-meta.json')).not.toBeNull();
   });
 
   it('should encrypt each file with one read, one staged write, and one rename', async () => {

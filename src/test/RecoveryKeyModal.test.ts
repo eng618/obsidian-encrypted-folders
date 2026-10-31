@@ -1,4 +1,5 @@
 import { App } from 'obsidian';
+
 import { RecoveryKeyModal } from '../ui/RecoveryKeyModal';
 
 describe('RecoveryKeyModal', () => {

@@ -1,10 +1,13 @@
-import * as path from 'path';
+import * as path from 'node:path';
+
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // 600k-iteration PBKDF2 exceeds Vitest's 5s default under CI coverage.
+    testTimeout: 30_000,
     setupFiles: ['./src/test/setup.ts'],
     alias: {
       obsidian: path.resolve(__dirname, './src/test/mocks/obsidian.ts'),

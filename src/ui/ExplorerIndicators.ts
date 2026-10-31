@@ -1,4 +1,6 @@
-import { App, TFolder } from 'obsidian';
+import type { App} from 'obsidian';
+import { TFolder } from 'obsidian';
+
 import type { FolderService } from '../services/FolderService';
 
 export function getIndicatorClass(isEncrypted: boolean, isUnlocked: boolean): string | null {
