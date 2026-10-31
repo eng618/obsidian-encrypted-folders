@@ -1,4 +1,5 @@
 import { App, Modal, Setting } from 'obsidian';
+
 import type { FolderPasswordKind } from '../models/PasswordManagement';
 import { addPasswordToggle } from './UIUtils';
 

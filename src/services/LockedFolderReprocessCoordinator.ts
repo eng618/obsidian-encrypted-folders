@@ -1,4 +1,5 @@
 import { App, Notice, TFile, TFolder } from 'obsidian';
+
 import type { FolderService } from '../services/FolderService';
 import { PasswordModal } from '../ui/PasswordModal';
 import { runWithProcessingModal } from '../ui/ProcessingRunner';

@@ -1,4 +1,5 @@
 import { Notice, Platform, Plugin } from 'obsidian';
+
 import { registerEventSubscriptions } from './src/events/EventSubscriptions';
 import type { EncryptedFoldersSettings } from './src/models/Settings';
 import { DEFAULT_SETTINGS, ensureTelemetryId, sanitizeSettings } from './src/models/Settings';

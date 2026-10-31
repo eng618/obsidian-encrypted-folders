@@ -1,4 +1,5 @@
 import { App, TFile, TFolder } from 'obsidian';
+
 import type { MasterPasswordRecord } from '../models/PasswordManagement';
 import { describePasswordKind, sanitizePasswordLabel, validateCustomPasswordLabel } from '../models/PasswordManagement';
 import { sanitizeSettings } from '../models/Settings';

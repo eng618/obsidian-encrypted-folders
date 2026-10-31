@@ -1,5 +1,6 @@
 import { App } from 'obsidian';
 import type { Mock } from 'vitest';
+
 import { PasswordModal } from '../ui/PasswordModal';
 
 describe('PasswordModal Brute-Force Protection', () => {

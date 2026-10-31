@@ -1,4 +1,5 @@
 import { App, Modal, Notice, Setting } from 'obsidian';
+
 import { addPasswordToggle } from './UIUtils';
 
 export class RemovalModal extends Modal {

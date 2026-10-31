@@ -1,4 +1,5 @@
 import * as fc from 'fast-check';
+
 import { BatchProcessor } from '../services/BatchProcessor';
 import { EncryptionService } from '../services/EncryptionService';
 import { TFile, TFolder } from './mocks/obsidian';

@@ -1,5 +1,6 @@
 import { App } from 'obsidian';
 import { vi } from 'vitest';
+
 import { ProcessingModal } from '../ui/ProcessingModal';
 
 describe('ProcessingModal', () => {

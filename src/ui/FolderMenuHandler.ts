@@ -1,4 +1,5 @@
 import { App, Menu, Notice, TFolder } from 'obsidian';
+
 import { describePasswordKind, FolderPasswordKind } from '../models/PasswordManagement';
 import type { EncryptedFoldersSettings } from '../models/Settings';
 import type { FolderService } from '../services/FolderService';

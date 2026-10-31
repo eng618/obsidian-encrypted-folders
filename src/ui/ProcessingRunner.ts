@@ -1,4 +1,5 @@
 import { App, Notice } from 'obsidian';
+
 import type { FolderProcessingOptions } from '../services/FolderService';
 import { createAbortError, isAbortError } from '../utils/abort';
 import { ProcessingModal } from './ProcessingModal';

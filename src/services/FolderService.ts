@@ -1,4 +1,5 @@
 import { App, TFile, TFolder, normalizePath } from 'obsidian';
+
 import { FolderLifecycleState, FolderMetadata } from '../models/FolderState';
 import {
   FolderPasswordKind,

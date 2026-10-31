@@ -1,4 +1,5 @@
 import { TFolder, normalizePath } from 'obsidian';
+
 import { FolderLifecycleState, FolderMetadata } from '../models/FolderState';
 import { EncryptionService } from './EncryptionService';
 import { FileService } from './FileService';

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import { builtinModules } from 'node:module';
 import * as path from 'path';
+
 import { defineConfig, Plugin } from 'vite';
 
 const banner = `/*
