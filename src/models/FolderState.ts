@@ -24,6 +24,11 @@ export interface FolderMetadata {
   expectedLockedFiles?: number; // Number of .locked payload files expected when folder is locked
   mac?: string; // Base64 encoded HMAC for password metadata verification
   recoveryMac?: string; // Base64 encoded HMAC for recovery key metadata verification
+  passwordKind?: 'master' | 'custom'; // Which password protects this folder (v3+)
+  passwordLabel?: string; // Plaintext title for custom passwords (v3+, never a secret)
+  wrappedMasterKeyMasterRecovery?: string; // Folder master key wrapped with shared master recovery key
+  masterRecoveryIV?: string; // IV for the shared master recovery wrapping
+  masterRecoveryMac?: string; // HMAC for the shared master recovery wrapping
   state?: FolderLifecycleState;
   lastTransitionAt?: number;
   lastError?: string;

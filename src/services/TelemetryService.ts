@@ -24,6 +24,12 @@ export type TelemetryEventName =
   | 'folder_locked'
   | 'encryption_removed'
   | 'auto_lock_triggered'
+  | 'master_password_setup'
+  | 'master_password_changed'
+  | 'master_password_removed'
+  | 'password_converted'
+  | 'password_relabelled'
+  | 'custom_password_changed'
   | 'error';
 
 const ALLOWED_EVENTS: ReadonlySet<TelemetryEventName> = new Set([
@@ -34,6 +40,12 @@ const ALLOWED_EVENTS: ReadonlySet<TelemetryEventName> = new Set([
   'folder_locked',
   'encryption_removed',
   'auto_lock_triggered',
+  'master_password_setup',
+  'master_password_changed',
+  'master_password_removed',
+  'password_converted',
+  'password_relabelled',
+  'custom_password_changed',
   'error',
 ]);
 

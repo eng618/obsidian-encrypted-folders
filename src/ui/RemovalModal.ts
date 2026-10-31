@@ -10,6 +10,7 @@ export class RemovalModal extends Modal {
     private isLocked: boolean,
     private folderName: string,
     private onConfirm: (password?: string) => Promise<void>,
+    private passwordBadge?: string,
   ) {
     super(app);
   }
@@ -25,11 +26,17 @@ export class RemovalModal extends Modal {
     });
 
     if (this.isLocked) {
+      if (this.passwordBadge) {
+        const badgeEl = contentEl.createDiv({ cls: 'password-kind-badge' });
+        badgeEl.textContent = this.passwordBadge;
+      }
       contentEl.createEl('p', {
-        text: 'The folder is currently locked. Enter your password to decrypt files and remove encryption.',
+        text: this.passwordBadge
+          ? `The folder is currently locked. Enter the ${this.passwordBadge.toLowerCase()} to decrypt files and remove encryption.`
+          : 'The folder is currently locked. Enter your password to decrypt files and remove encryption.',
       });
 
-      const passwordSetting = new Setting(contentEl).setName('Password');
+      const passwordSetting = new Setting(contentEl).setName(this.passwordBadge ?? 'Password');
       passwordSetting.addText((text) => {
         text.setPlaceholder('Enter password').onChange((value) => {
           this.password = value;

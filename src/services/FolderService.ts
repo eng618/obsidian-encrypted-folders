@@ -1,5 +1,13 @@
 import { App, TFile, TFolder, normalizePath } from 'obsidian';
 import { FolderLifecycleState, FolderMetadata } from '../models/FolderState';
+import {
+  FolderPasswordKind,
+  MASTER_KDF_ITERATIONS,
+  MASTER_VERIFIER_PHRASE,
+  MasterPasswordRecord,
+  sanitizePasswordLabel,
+  validateCustomPasswordLabel,
+} from '../models/PasswordManagement';
 import { AutoLockManager, AutoLockSettings, IdleLockCountdown } from './AutoLockManager';
 import { BatchProcessor, FolderProcessingOptions } from './BatchProcessor';
 import { EncryptionService, KeyDerivationCache } from './EncryptionService';
@@ -15,11 +23,33 @@ export type {
   FolderProcessingStatus,
 } from './BatchProcessor';
 
+export interface MasterPasswordStore {
+  load(): MasterPasswordRecord | null | undefined;
+  save(record: MasterPasswordRecord | null): Promise<void>;
+}
+
 export interface FolderServiceDeps {
   metadataManager?: MetadataManager;
   autoLockManager?: AutoLockManager;
   batchProcessor?: BatchProcessor;
   telemetry?: TelemetrySink;
+  masterPasswordStore?: MasterPasswordStore;
+}
+
+export interface CreateEncryptedFolderPasswordOptions {
+  kind?: FolderPasswordKind;
+  label?: string;
+  /**
+   * Shared master recovery key plaintext. Required when kind is 'master'
+   * so the folder key is also wrapped for master-recovery unlock.
+   */
+  masterRecoveryKey?: string;
+}
+
+export interface FolderPasswordSummary {
+  path: string;
+  kind: FolderPasswordKind;
+  label?: string;
 }
 
 export type FolderLockVia = 'manual' | 'background' | 'idle' | 'unload';
@@ -56,6 +86,7 @@ export class FolderService {
   private autoLockManager: AutoLockManager;
   private batchProcessor: BatchProcessor;
   private telemetry: TelemetrySink | undefined;
+  private masterPasswordStore: MasterPasswordStore | undefined;
 
   constructor(
     private encryptionService: EncryptionService,
@@ -69,6 +100,11 @@ export class FolderService {
     this.autoLockManager = deps.autoLockManager ?? new AutoLockManager();
     this.batchProcessor = deps.batchProcessor ?? new BatchProcessor([this.META_FILE_NAME, this.README_FILE_NAME]);
     this.telemetry = deps.telemetry;
+    this.masterPasswordStore = deps.masterPasswordStore;
+  }
+
+  setMasterPasswordStore(store: MasterPasswordStore | undefined): void {
+    this.masterPasswordStore = store;
   }
 
   setDebugLogging(enabled: boolean): void {
@@ -350,12 +386,27 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     password: string,
     lockImmediately = false,
     options?: FolderProcessingOptions,
+    passwordOptions?: CreateEncryptedFolderPasswordOptions,
   ): Promise<string> {
     if (this.isInsideEncryptedFolder(folder)) {
       throw new Error('Nested encryption is not allowed. A parent folder is already encrypted.');
     }
 
-    const recoveryKey = this.generateRecoveryKey();
+    const kind: FolderPasswordKind = passwordOptions?.kind ?? 'custom';
+    const label = kind === 'custom' ? sanitizePasswordLabel(passwordOptions?.label) : undefined;
+    let masterRecoveryKey: string | undefined;
+    if (kind === 'master') {
+      const record = this.masterPasswordStore?.load();
+      if (!record) {
+        throw new Error('Master password is not set up. Set it up in settings first.');
+      }
+      if (!passwordOptions?.masterRecoveryKey) {
+        throw new Error('Master recovery key material is required to encrypt with the master password.');
+      }
+      masterRecoveryKey = passwordOptions.masterRecoveryKey;
+    }
+
+    const recoveryKey = kind === 'master' ? masterRecoveryKey! : this.generateRecoveryKey();
     const tempExportableKey = await this.encryptionService.generateMasterKey(true);
     const masterKeyRaw = await this.encryptionService.exportKey(tempExportableKey);
     const masterKey = await this.encryptionService.importKey(masterKeyRaw, false);
@@ -377,7 +428,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
 
     let metadata: FolderMetadata = {
       version: 2,
-      schemaVersion: 2,
+      schemaVersion: 3,
       id: window.crypto.randomUUID(),
       encryptionMethod: 'AES-256-GCM',
       kdfMethod: 'PBKDF2-SHA256',
@@ -390,9 +441,29 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       recoverySalt: this.metadataManager.arrayBufferToBase64(recoverySalt),
       wrappedMasterKeyRecovery: this.metadataManager.arrayBufferToBase64(recoveryWrappedResult.ciphertext),
       recoveryIV: this.metadataManager.arrayBufferToBase64(recoveryWrappedResult.iv),
+      passwordKind: kind,
+      passwordLabel: label,
       state: lockImmediately ? 'locking' : 'unlocked',
       lastTransitionAt: Date.now(),
     };
+
+    // Master folders additionally wrap the folder key with the shared master
+    // recovery key so one recovery key opens every master folder.
+    if (kind === 'master') {
+      const record = this.masterPasswordStore?.load();
+      if (!record) {
+        throw new Error('Master password is not set up. Set it up in settings first.');
+      }
+      const masterRecoverySalt = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.recoverySalt));
+      const { encryptionKey: sharedKey, hmacKey: sharedHmac } = await this.encryptionService.deriveSecretKeys(
+        masterRecoveryKey!,
+        masterRecoverySalt,
+      );
+      const sharedWrapped = await this.encryptionService.encryptWithKey(masterKeyRaw, sharedKey);
+      metadata.wrappedMasterKeyMasterRecovery = this.metadataManager.arrayBufferToBase64(sharedWrapped.ciphertext);
+      metadata.masterRecoveryIV = this.metadataManager.arrayBufferToBase64(sharedWrapped.iv);
+      metadata.masterRecoveryMac = await this.metadataManager.computeMetadataMacWithKey(metadata, sharedHmac);
+    }
 
     metadata.mac = await this.metadataManager.computeMetadataMacWithKey(metadata, hmacKey);
     metadata.recoveryMac = await this.metadataManager.computeMetadataMacWithKey(metadata, recoveryHmacKey);
@@ -426,6 +497,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     this.debug('encrypted folder created', { folder: folder.path, state: metadata.state });
     this.telemetry?.trackEvent('folder_encrypted', {
       lock_immediately: lockImmediately,
+      password_kind: kind,
       file_count_bucket:
         lockImmediately && typeof metadata.expectedLockedFiles === 'number'
           ? bucketCount(metadata.expectedLockedFiles)
@@ -434,7 +506,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     return recoveryKey;
   }
 
-  private generateRecoveryKey(): string {
+  generateRecoveryKey(): string {
     const charset = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let ret = '';
     const bytes = new Uint8Array(32);
@@ -446,6 +518,618 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       }
     }
     return ret;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Master password lifecycle
+  // ---------------------------------------------------------------------------
+
+  hasMasterPassword(): boolean {
+    return this.masterPasswordStore?.load() != null;
+  }
+
+  getMasterRecord(): MasterPasswordRecord | null {
+    return this.masterPasswordStore?.load() ?? null;
+  }
+
+  private requireMasterStore(): MasterPasswordStore {
+    const store = this.masterPasswordStore;
+    if (!store) {
+      throw new Error('Master password storage is not configured.');
+    }
+    return store;
+  }
+
+  private async buildMasterVerifier(
+    secret: string,
+    salt: Uint8Array,
+  ): Promise<{ verifier: string; verifierIV: string }> {
+    const { encryptionKey } = await this.encryptionService.deriveSecretKeys(secret, salt);
+    const result = await this.encryptionService.encryptWithKey(
+      new TextEncoder().encode(MASTER_VERIFIER_PHRASE).buffer,
+      encryptionKey,
+    );
+    return {
+      verifier: this.metadataManager.arrayBufferToBase64(result.ciphertext),
+      verifierIV: this.metadataManager.arrayBufferToBase64(result.iv),
+    };
+  }
+
+  private async verifyMasterRecord(record: MasterPasswordRecord, password: string): Promise<boolean> {
+    try {
+      const salt = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.salt));
+      const { encryptionKey } = await this.encryptionService.deriveSecretKeys(password, salt);
+      const ciphertext = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.verifier));
+      const iv = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.verifierIV));
+      const plaintext = await this.encryptionService.decryptWithKey(ciphertext, encryptionKey, iv);
+      return new TextDecoder().decode(plaintext) === MASTER_VERIFIER_PHRASE;
+    } catch {
+      return false;
+    }
+  }
+
+  async verifyMasterPassword(password: string): Promise<boolean> {
+    const record = this.masterPasswordStore?.load();
+    if (!record) {
+      return false;
+    }
+    return this.verifyMasterRecord(record, password);
+  }
+
+  async verifyMasterRecoveryKey(recoveryKey: string): Promise<boolean> {
+    const record = this.masterPasswordStore?.load();
+    if (!record || !record.recoverySalt || !record.recoveryVerifier) {
+      return false;
+    }
+    try {
+      const salt = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.recoverySalt));
+      const { encryptionKey } = await this.encryptionService.deriveSecretKeys(recoveryKey, salt);
+      const ciphertext = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.recoveryVerifier));
+      const iv = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.recoveryVerifierIV));
+      const plaintext = await this.encryptionService.decryptWithKey(ciphertext, encryptionKey, iv);
+      return new TextDecoder().decode(plaintext) === MASTER_VERIFIER_PHRASE;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Unwraps the stored master recovery key envelope with the master password.
+   * The envelope lets folder creation/convert flows wrap new master folders
+   * with the shared recovery key without ever persisting it in plaintext.
+   */
+  async unwrapMasterRecoveryKey(masterPassword: string): Promise<string> {
+    const record = this.masterPasswordStore?.load();
+    if (!record) {
+      throw new Error('Master password is not set up.');
+    }
+    const valid = await this.verifyMasterRecord(record, masterPassword);
+    if (!valid) {
+      throw new Error('Incorrect master password.');
+    }
+    const salt = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.salt));
+    const { encryptionKey } = await this.encryptionService.deriveSecretKeys(masterPassword, salt);
+    const ciphertext = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.recoveryKeyEnvelope));
+    const iv = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.recoveryKeyEnvelopeIV));
+    const plaintext = await this.encryptionService.decryptWithKey(ciphertext, encryptionKey, iv);
+    return new TextDecoder().decode(plaintext);
+  }
+
+  private assertMasterPasswordStrength(password: string): void {
+    if (!password || password.length < 8) {
+      throw new Error('Master password must be at least 8 characters.');
+    }
+  }
+
+  async setupMasterPassword(password: string, recoveryKey?: string): Promise<string> {
+    const store = this.requireMasterStore();
+    if (store.load()) {
+      throw new Error('Master password is already set. Use change instead.');
+    }
+    this.assertMasterPasswordStrength(password);
+    const key = recoveryKey?.trim() ? recoveryKey.trim() : this.generateRecoveryKey();
+
+    const salt = this.encryptionService.generateSalt();
+    const { verifier, verifierIV } = await this.buildMasterVerifier(password, salt);
+    const recoverySalt = this.encryptionService.generateSalt();
+    const recoveryBuilt = await this.buildMasterVerifier(key, recoverySalt);
+
+    const { encryptionKey } = await this.encryptionService.deriveSecretKeys(password, salt);
+    const envelope = await this.encryptionService.encryptWithKey(new TextEncoder().encode(key).buffer, encryptionKey);
+
+    const now = Date.now();
+    const record: MasterPasswordRecord = {
+      salt: this.metadataManager.arrayBufferToBase64(salt),
+      verifier,
+      verifierIV,
+      iterations: MASTER_KDF_ITERATIONS,
+      recoverySalt: this.metadataManager.arrayBufferToBase64(recoverySalt),
+      recoveryVerifier: recoveryBuilt.verifier,
+      recoveryVerifierIV: recoveryBuilt.verifierIV,
+      recoveryKeyEnvelope: this.metadataManager.arrayBufferToBase64(envelope.ciphertext),
+      recoveryKeyEnvelopeIV: this.metadataManager.arrayBufferToBase64(envelope.iv),
+      createdAt: now,
+      updatedAt: now,
+    };
+    await store.save(record);
+    this.telemetry?.trackEvent('master_password_setup', {});
+    return key;
+  }
+
+  /**
+   * Rotates the master password and bulk re-wraps every master-kind folder.
+   * Only the small wrapped-key blobs are re-encrypted; file contents are
+   * untouched and folders may stay locked throughout.
+   */
+  async changeMasterPassword(oldPassword: string, newPassword: string): Promise<{ rotated: number; total: number }> {
+    const store = this.requireMasterStore();
+    const record = store.load();
+    if (!record) {
+      throw new Error('Master password is not set up.');
+    }
+    this.assertMasterPasswordStrength(newPassword);
+    if (!(await this.verifyMasterRecord(record, oldPassword))) {
+      throw new Error('Incorrect current master password.');
+    }
+
+    const summaries = await this.listFolderPasswordKinds();
+    const masterPaths = summaries.filter((s) => s.kind === 'master').map((s) => s.path);
+
+    const newSalt = this.encryptionService.generateSalt();
+    let rotated = 0;
+    const errors: { path: string; error: unknown }[] = [];
+    for (const path of masterPaths) {
+      const folder = this.fileService.getAbstractFileByPath(path);
+      if (!(folder instanceof TFolder)) {
+        continue;
+      }
+      try {
+        const metadata = await this.readMetadata(folder);
+        if (!metadata) {
+          throw new Error('Missing metadata.');
+        }
+        const { masterKeyRaw } = await this.getMasterKeyFromSecret(metadata, oldPassword, false);
+        const { encryptionKey: newKey, hmacKey: newHmac } = await this.encryptionService.deriveSecretKeys(
+          newPassword,
+          newSalt,
+        );
+        // NOTE: folders created at different times share the rotation salt
+        // here; each wrap still uses a fresh random IV. Per-folder salts
+        // return on the next convert/password-change of that folder.
+        const rewrapped = await this.encryptionService.encryptWithKey(masterKeyRaw, newKey);
+        const next: FolderMetadata = {
+          ...metadata,
+          salt: this.metadataManager.arrayBufferToBase64(newSalt),
+          iterations: MASTER_KDF_ITERATIONS,
+          wrappedMasterKey: this.metadataManager.arrayBufferToBase64(rewrapped.ciphertext),
+          masterKeyIV: this.metadataManager.arrayBufferToBase64(rewrapped.iv),
+        };
+        next.mac = await this.metadataManager.computeMetadataMacWithKey(next, newHmac);
+        await this.writeMetadata(folder.path, next);
+        rotated++;
+      } catch (error: unknown) {
+        errors.push({ path, error });
+        this.debug('master rotation failed for folder', { path, error: String(error) });
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new Error(
+        `Rotated ${rotated} of ${masterPaths.length} folders. Failed: ${errors.map((e) => e.path).join(', ')}`,
+      );
+    }
+
+    const { verifier, verifierIV } = await this.buildMasterVerifier(newPassword, newSalt);
+    const { encryptionKey: envelopeKey } = await this.encryptionService.deriveSecretKeys(newPassword, newSalt);
+    const recoveryKey = await this.unwrapMasterRecoveryKey(oldPassword);
+    const envelope = await this.encryptionService.encryptWithKey(
+      new TextEncoder().encode(recoveryKey).buffer,
+      envelopeKey,
+    );
+    await store.save({
+      ...record,
+      salt: this.metadataManager.arrayBufferToBase64(newSalt),
+      verifier,
+      verifierIV,
+      iterations: MASTER_KDF_ITERATIONS,
+      recoveryKeyEnvelope: this.metadataManager.arrayBufferToBase64(envelope.ciphertext),
+      recoveryKeyEnvelopeIV: this.metadataManager.arrayBufferToBase64(envelope.iv),
+      updatedAt: Date.now(),
+    });
+    this.telemetry?.trackEvent('master_password_changed', { folder_count_bucket: bucketCount(masterPaths.length) });
+    return { rotated, total: masterPaths.length };
+  }
+
+  async removeMasterPassword(password: string): Promise<void> {
+    const store = this.requireMasterStore();
+    const record = store.load();
+    if (!record) {
+      return;
+    }
+    if (!(await this.verifyMasterRecord(record, password))) {
+      throw new Error('Incorrect master password.');
+    }
+    const summaries = await this.listFolderPasswordKinds();
+    const remaining = summaries.filter((s) => s.kind === 'master');
+    if (remaining.length > 0) {
+      throw new Error(
+        `Cannot remove the master password while ${remaining.length} folder(s) use it: ${remaining.map((s) => s.path).join(', ')}. Convert them to custom passwords first.`,
+      );
+    }
+    await store.save(null);
+    this.telemetry?.trackEvent('master_password_removed', {});
+  }
+
+  getFolderPasswordKind(metadata: FolderMetadata | null | undefined): FolderPasswordKind {
+    return metadata?.passwordKind === 'master' ? 'master' : 'custom';
+  }
+
+  /** Public metadata read for UI flows (badges, kind checks). Fails closed. */
+  async readFolderMetadata(folder: TFolder): Promise<FolderMetadata | null> {
+    try {
+      return await this.readMetadata(folder);
+    } catch (error: unknown) {
+      this.debug('readFolderMetadata failed', { folder: folder.path, error: String(error) });
+      return null;
+    }
+  }
+
+  /**
+   * Verifies a secret against a folder without changing lock state.
+   * Tries the password slot, then (for master folders) the shared
+   * master-recovery slot, then the per-folder recovery slot.
+   */
+  async verifyFolderSecret(folder: TFolder, secret: string): Promise<boolean> {
+    const metadata = await this.readFolderMetadata(folder);
+    if (!metadata) {
+      return false;
+    }
+    try {
+      await this.getMasterKeyFromSecret(metadata, secret, false);
+      return true;
+    } catch {
+      // Fall through to recovery slots.
+    }
+    if (this.getFolderPasswordKind(metadata) === 'master' && metadata.wrappedMasterKeyMasterRecovery) {
+      try {
+        await this.unwrapWithMasterRecovery(metadata, secret);
+        return true;
+      } catch {
+        // Fall through to the per-folder recovery slot.
+      }
+    }
+    try {
+      await this.getMasterKeyFromSecret(metadata, secret, true);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async listFolderPasswordKinds(): Promise<FolderPasswordSummary[]> {
+    const summaries: FolderPasswordSummary[] = [];
+    for (const path of Array.from(this.encryptedFolders)) {
+      const folder = this.fileService.getAbstractFileByPath(path);
+      if (!(folder instanceof TFolder)) {
+        continue;
+      }
+      let metadata: FolderMetadata | null = null;
+      try {
+        metadata = await this.readMetadata(folder);
+      } catch {
+        continue;
+      }
+      if (!metadata) {
+        continue;
+      }
+      summaries.push({
+        path,
+        kind: this.getFolderPasswordKind(metadata),
+        label: sanitizePasswordLabel(metadata.passwordLabel),
+      });
+    }
+    summaries.sort((a, b) => a.path.localeCompare(b.path));
+    return summaries;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Phase 2: convert / change / relabel
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Re-wraps an already-unwrapped folder key under a fresh password +
+   * recovery pair and stamps kind/label. Shared master-recovery slots are
+   * attached separately by the caller when needed.
+   */
+  private async rewrapFolderKeyWithPassword(
+    metadata: FolderMetadata,
+    masterKeyRaw: ArrayBuffer,
+    password: string,
+    recoveryKey: string,
+    kind: FolderPasswordKind,
+    label: string | undefined,
+  ): Promise<FolderMetadata> {
+    const salt = this.encryptionService.generateSalt();
+    const { encryptionKey, hmacKey } = await this.encryptionService.deriveSecretKeys(password, salt);
+    const wrapped = await this.encryptionService.encryptWithKey(masterKeyRaw, encryptionKey);
+
+    const recoverySalt = this.encryptionService.generateSalt();
+    const { encryptionKey: recoveryDerivedKey, hmacKey: recoveryHmac } = await this.encryptionService.deriveSecretKeys(
+      recoveryKey,
+      recoverySalt,
+    );
+    const recoveryWrapped = await this.encryptionService.encryptWithKey(masterKeyRaw, recoveryDerivedKey);
+
+    const next: FolderMetadata = {
+      ...metadata,
+      salt: this.metadataManager.arrayBufferToBase64(salt),
+      iterations: MASTER_KDF_ITERATIONS,
+      wrappedMasterKey: this.metadataManager.arrayBufferToBase64(wrapped.ciphertext),
+      masterKeyIV: this.metadataManager.arrayBufferToBase64(wrapped.iv),
+      recoverySalt: this.metadataManager.arrayBufferToBase64(recoverySalt),
+      wrappedMasterKeyRecovery: this.metadataManager.arrayBufferToBase64(recoveryWrapped.ciphertext),
+      recoveryIV: this.metadataManager.arrayBufferToBase64(recoveryWrapped.iv),
+      passwordKind: kind,
+      passwordLabel: label,
+    };
+    next.mac = await this.metadataManager.computeMetadataMacWithKey(next, hmacKey);
+    next.recoveryMac = await this.metadataManager.computeMetadataMacWithKey(next, recoveryHmac);
+    return next;
+  }
+
+  private async attachSharedMasterRecovery(
+    metadata: FolderMetadata,
+    masterKeyRaw: ArrayBuffer,
+    masterRecoveryKey: string,
+  ): Promise<FolderMetadata> {
+    const record = this.masterPasswordStore?.load();
+    if (!record) {
+      throw new Error('Master password is not set up.');
+    }
+    const salt = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.recoverySalt));
+    const { encryptionKey, hmacKey } = await this.encryptionService.deriveSecretKeys(masterRecoveryKey, salt);
+    const wrapped = await this.encryptionService.encryptWithKey(masterKeyRaw, encryptionKey);
+    const next: FolderMetadata = {
+      ...metadata,
+      wrappedMasterKeyMasterRecovery: this.metadataManager.arrayBufferToBase64(wrapped.ciphertext),
+      masterRecoveryIV: this.metadataManager.arrayBufferToBase64(wrapped.iv),
+    };
+    next.masterRecoveryMac = await this.metadataManager.computeMetadataMacWithKey(next, hmacKey);
+    return next;
+  }
+
+  /**
+   * Unlock attempt that also accepts the shared master recovery key in the
+   * main password box for master-kind folders. Dedicated recovery menus
+   * should still use unlockFolder with isRecovery=true for explicitness.
+   */
+  async unlockFolderWithAutoDetect(
+    folder: TFolder,
+    secret: string,
+    options?: FolderProcessingOptions,
+    derivationCache?: KeyDerivationCache,
+  ): Promise<boolean> {
+    if (await this.unlockFolder(folder, secret, false, options, derivationCache)) {
+      return true;
+    }
+    let metadata: FolderMetadata | null = null;
+    try {
+      metadata = await this.readMetadata(folder);
+    } catch {
+      return false;
+    }
+    if (!metadata || this.getFolderPasswordKind(metadata) !== 'master') {
+      return false;
+    }
+    if (!metadata.wrappedMasterKeyMasterRecovery || !metadata.masterRecoveryIV) {
+      return false;
+    }
+    const record = this.masterPasswordStore?.load();
+    if (!record) {
+      return false;
+    }
+    try {
+      const salt = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.recoverySalt));
+      const { encryptionKey } = derivationCache
+        ? await derivationCache.deriveSecretKeys(secret, salt)
+        : await this.encryptionService.deriveSecretKeys(secret, salt);
+      const wrappedMK = new Uint8Array(
+        this.metadataManager.base64ToArrayBuffer(metadata.wrappedMasterKeyMasterRecovery),
+      );
+      const mkIV = new Uint8Array(this.metadataManager.base64ToArrayBuffer(metadata.masterRecoveryIV));
+      const masterKeyRaw = await this.encryptionService.decryptWithKey(wrappedMK, encryptionKey, mkIV);
+      const masterKey = await this.encryptionService.importKey(masterKeyRaw, false);
+      // Reuse the standard path for file decryption + state transitions by
+      // re-entering unlock via a synthetic success: decrypt contents here.
+      const lockedFiles = this.countLockedFiles(folder);
+      const expectedLockedFiles = metadata.expectedLockedFiles;
+      if (typeof expectedLockedFiles === 'number' && expectedLockedFiles > 0 && lockedFiles < expectedLockedFiles) {
+        throw new Error(
+          `Encrypted files are still syncing (${lockedFiles}/${expectedLockedFiles}). Please wait and try again.`,
+        );
+      }
+      metadata = await this.transitionMetadataState(folder, metadata, 'unlocking');
+      const decryptErrors = await this.decryptFolderContents(folder, masterKey, options);
+      const readmeFile = this.fileService.getFile(this.getReadmePath(folder.path));
+      if (readmeFile) {
+        await this.fileService.deleteFile(readmeFile);
+      }
+      this.unlockedFolders.set(this.toFolderKey(folder.path), masterKey);
+      this.recordActivityForPath(folder.path);
+      const partialError =
+        decryptErrors.length > 0
+          ? `Partial decrypt: ${decryptErrors.length} file(s) could not be restored and remain locked: ${decryptErrors.map((e) => e.path).join(', ')}`
+          : undefined;
+      await this.transitionMetadataState(folder, metadata, 'unlocked', partialError);
+      this.telemetry?.trackEvent('folder_unlocked', { via: 'master_recovery_auto', success: true });
+      return true;
+    } catch (error: unknown) {
+      this.debug('master recovery auto-detect failed', { folder: folder.path, error: String(error) });
+      return false;
+    }
+  }
+
+  /**
+   * Unwraps a folder key trying each slot in order: password, shared
+   * master-recovery (master folders), per-folder recovery. Lets convert
+   * and change flows accept whichever secret the user has.
+   */
+  private async unwrapFolderKeyAuto(metadata: FolderMetadata, secret: string): Promise<{ masterKeyRaw: ArrayBuffer }> {
+    try {
+      const { masterKeyRaw } = await this.getMasterKeyFromSecret(metadata, secret, false);
+      return { masterKeyRaw };
+    } catch {
+      // Fall through to recovery slots.
+    }
+    if (this.getFolderPasswordKind(metadata) === 'master' && metadata.wrappedMasterKeyMasterRecovery) {
+      try {
+        return await this.unwrapWithMasterRecovery(metadata, secret);
+      } catch {
+        // Fall through to the per-folder recovery slot.
+      }
+    }
+    const { masterKeyRaw } = await this.getMasterKeyFromSecret(metadata, secret, true);
+    return { masterKeyRaw };
+  }
+
+  async convertToCustom(folder: TFolder, currentSecret: string, newPassword: string, label: string): Promise<string> {
+    const metadata = await this.readMetadata(folder);
+    if (!metadata) {
+      throw new Error('Cannot convert folder without metadata.');
+    }
+    if (this.getFolderPasswordKind(metadata) !== 'master') {
+      throw new Error('Folder does not use the master password.');
+    }
+    if (!newPassword || newPassword.length < 8) {
+      throw new Error('New password must be at least 8 characters.');
+    }
+    const cleanLabel = validateCustomPasswordLabel(label);
+
+    const { masterKeyRaw } = await this.unwrapFolderKeyAuto(metadata, currentSecret);
+
+    const newRecoveryKey = this.generateRecoveryKey();
+    let next = await this.rewrapFolderKeyWithPassword(
+      metadata,
+      masterKeyRaw,
+      newPassword,
+      newRecoveryKey,
+      'custom',
+      cleanLabel,
+    );
+    next = {
+      ...next,
+      wrappedMasterKeyMasterRecovery: undefined,
+      masterRecoveryIV: undefined,
+      masterRecoveryMac: undefined,
+    };
+    await this.writeMetadata(folder.path, next);
+    this.telemetry?.trackEvent('password_converted', { direction: 'to_custom' });
+    return newRecoveryKey;
+  }
+
+  async convertToMaster(folder: TFolder, currentSecret: string, masterPassword: string): Promise<void> {
+    const record = this.masterPasswordStore?.load();
+    if (!record) {
+      throw new Error('Master password is not set up.');
+    }
+    if (!(await this.verifyMasterRecord(record, masterPassword))) {
+      throw new Error('Incorrect master password.');
+    }
+    const metadata = await this.readMetadata(folder);
+    if (!metadata) {
+      throw new Error('Cannot convert folder without metadata.');
+    }
+    if (this.getFolderPasswordKind(metadata) === 'master') {
+      throw new Error('Folder already uses the master password.');
+    }
+
+    const { masterKeyRaw } = await this.unwrapFolderKeyAuto(metadata, currentSecret);
+
+    const masterRecoveryKey = await this.unwrapMasterRecoveryKey(masterPassword);
+    let next = await this.rewrapFolderKeyWithPassword(
+      metadata,
+      masterKeyRaw,
+      masterPassword,
+      // Per-folder recovery slot still exists as a fallback; the shared
+      // master recovery slot is attached right after.
+      this.generateRecoveryKey(),
+      'master',
+      undefined,
+    );
+    next = await this.attachSharedMasterRecovery(next, masterKeyRaw, masterRecoveryKey);
+    await this.writeMetadata(folder.path, next);
+    this.telemetry?.trackEvent('password_converted', { direction: 'to_master' });
+  }
+
+  async changeCustomPassword(folder: TFolder, currentSecret: string, newPassword: string): Promise<string> {
+    const metadata = await this.readMetadata(folder);
+    if (!metadata) {
+      throw new Error('Cannot change password without metadata.');
+    }
+    if (this.getFolderPasswordKind(metadata) !== 'custom') {
+      throw new Error('Folder uses the master password. Convert it to a custom password first.');
+    }
+    if (!newPassword || newPassword.length < 8) {
+      throw new Error('New password must be at least 8 characters.');
+    }
+    const { masterKeyRaw } = await this.unwrapFolderKeyAuto(metadata, currentSecret);
+    const newRecoveryKey = this.generateRecoveryKey();
+    const next = await this.rewrapFolderKeyWithPassword(
+      metadata,
+      masterKeyRaw,
+      newPassword,
+      newRecoveryKey,
+      'custom',
+      sanitizePasswordLabel(metadata.passwordLabel),
+    );
+    await this.writeMetadata(folder.path, next);
+    this.telemetry?.trackEvent('custom_password_changed', {});
+    return newRecoveryKey;
+  }
+
+  /**
+   * Renames a custom password's title. No crypto involved. Requires the
+   * current secret when the folder is locked so labels cannot be rewritten
+   * without proving access.
+   */
+  async relabelFolder(folder: TFolder, label: string, currentSecret?: string): Promise<void> {
+    const metadata = await this.readMetadata(folder);
+    if (!metadata) {
+      throw new Error('Cannot relabel folder without metadata.');
+    }
+    if (this.getFolderPasswordKind(metadata) !== 'custom') {
+      throw new Error('Only custom passwords have titles. Master password folders need no label.');
+    }
+    const cleanLabel = validateCustomPasswordLabel(label);
+    if (!this.isUnlocked(folder)) {
+      if (!currentSecret) {
+        throw new Error('Password is required to relabel a locked folder.');
+      }
+      const verified = await this.verifyFolderSecret(folder, currentSecret);
+      if (!verified) {
+        throw new Error('Authentication failed: Invalid password');
+      }
+    }
+    await this.writeMetadata(folder.path, { ...metadata, passwordLabel: cleanLabel });
+    this.telemetry?.trackEvent('password_relabelled', {});
+  }
+
+  private async unwrapWithMasterRecovery(
+    metadata: FolderMetadata,
+    recoveryKey: string,
+  ): Promise<{ masterKeyRaw: ArrayBuffer }> {
+    const record = this.masterPasswordStore?.load();
+    if (!record || !metadata.wrappedMasterKeyMasterRecovery || !metadata.masterRecoveryIV) {
+      throw new Error('Master recovery is not available for this folder.');
+    }
+    const salt = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.recoverySalt));
+    const { encryptionKey } = await this.encryptionService.deriveSecretKeys(recoveryKey, salt);
+    const wrappedMK = new Uint8Array(this.metadataManager.base64ToArrayBuffer(metadata.wrappedMasterKeyMasterRecovery));
+    const mkIV = new Uint8Array(this.metadataManager.base64ToArrayBuffer(metadata.masterRecoveryIV));
+    const masterKeyRaw = await this.encryptionService.decryptWithKey(wrappedMK, encryptionKey, mkIV).catch(() => {
+      throw new Error('Authentication failed: Invalid recovery key');
+    });
+    return { masterKeyRaw };
   }
 
   async encryptFolderContents(folder: TFolder, key: CryptoKey, options?: FolderProcessingOptions): Promise<number> {
@@ -786,7 +1470,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     secret: string,
     isRecovery: boolean,
     cache?: KeyDerivationCache,
-  ): Promise<{ masterKey: CryptoKey; hmacKey: CryptoKey }> {
+  ): Promise<{ masterKey: CryptoKey; hmacKey: CryptoKey; masterKeyRaw: ArrayBuffer }> {
     const encodedSalt = isRecovery ? metadata.recoverySalt : metadata.salt;
     const wrappedMaster = isRecovery ? metadata.wrappedMasterKeyRecovery : metadata.wrappedMasterKey;
     const wrappedIV = isRecovery ? metadata.recoveryIV : metadata.masterKeyIV;
@@ -827,7 +1511,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       throw new Error('Authentication failed: Token mismatch');
     }
 
-    return { masterKey, hmacKey };
+    return { masterKey, hmacKey, masterKeyRaw };
   }
 
   /**

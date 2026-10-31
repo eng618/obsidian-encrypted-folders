@@ -6,6 +6,10 @@
 
 Each folder gets its own AES-256-GCM master key, wrapped separately under the password-derived and recovery-derived keys. Files encrypt directly with the master key, so a future password change only re-wraps one small blob instead of re-encrypting every file. The recovery key is a second wrap, not a backdoor in the cipher.
 
+## Master password plus titled custom passwords
+
+The optional master password is a UX default, not a separate cipher layer: master folders still wrap their own folder key, but with the master-password string and a fresh per-folder salt, plus an extra wrap under one shared master recovery key. Sharing the recovery plaintext at creation time would be impossible (it is never stored), so settings keep the recovery key AES-GCM-enveloped under the master-derived key; entering the master password unwraps the envelope in memory for creation and convert flows. Custom passwords carry a plaintext title (`passwordLabel`) so unlock prompts can say which secret they expect; titles ride in folder metadata so they survive sync, and must never contain secrets. Unlock uses one box that tries the password slot then (for master folders) the shared-recovery slot, while badges keep the expected kind explicit without oracling failures.
+
 ## Single-PBKDF2 split derivation
 
 Password verification needs two keys (AES unwrap + HMAC check). Deriving each with its own 600,000-iteration PBKDF2 doubled unlock latency, so one PBKDF2 produces 512 bits split into the two domain-separated keys. Per-modal retry caches skip re-derivation for repeated identical secrets and are cleared on modal close to bound key-material lifetime.

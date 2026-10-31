@@ -5,7 +5,7 @@ import { FileService } from './FileService';
 
 export class MetadataManager {
   private readonly META_FILE_NAME = 'obsidian-folder-meta.json';
-  private readonly META_SCHEMA_VERSION = 2;
+  private readonly META_SCHEMA_VERSION = 3;
   private readonly MIN_KDF_ITERATIONS = 600000;
   private readonly MAX_LAST_ERROR_LENGTH = 500;
 
@@ -76,6 +76,31 @@ export class MetadataManager {
     if (metadata.state !== undefined && !isLifecycleState(metadata.state)) {
       fail('state has an unexpected value');
     }
+    if (
+      metadata.passwordKind !== undefined &&
+      metadata.passwordKind !== 'master' &&
+      metadata.passwordKind !== 'custom'
+    ) {
+      fail('passwordKind must be "master" or "custom"');
+    }
+    if (metadata.passwordLabel !== undefined) {
+      if (typeof metadata.passwordLabel !== 'string' || metadata.passwordLabel.trim().length === 0) {
+        fail('passwordLabel must be a non-empty string');
+      }
+      const label = metadata.passwordLabel as string;
+      if (label.length > 80) {
+        fail('passwordLabel must be at most 80 characters');
+      }
+      // eslint-disable-next-line no-control-regex -- reject C0/C1 control characters in titles
+      if (/[\u0000-\u001f\u007f]/.test(label)) {
+        fail('passwordLabel contains invalid characters');
+      }
+    }
+    for (const field of ['wrappedMasterKeyMasterRecovery', 'masterRecoveryIV', 'masterRecoveryMac'] as const) {
+      if (metadata[field] !== undefined && (typeof metadata[field] !== 'string' || metadata[field].length === 0)) {
+        fail(`${field} must be a non-empty string`);
+      }
+    }
     if (metadata.lastTransitionAt !== undefined && typeof metadata.lastTransitionAt !== 'number') {
       fail('lastTransitionAt must be a number');
     }
@@ -105,6 +130,8 @@ export class MetadataManager {
       state: metadata.state ?? 'locked',
       lastTransitionAt: Date.now(),
       lastError: undefined,
+      // Pre-v3 folders predate password kinds; they behave as custom passwords.
+      passwordKind: metadata.passwordKind ?? 'custom',
     };
   }
 

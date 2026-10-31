@@ -1,3 +1,5 @@
+import { MasterPasswordRecord, isMasterPasswordRecord } from './PasswordManagement';
+
 export interface EncryptedFoldersSettings {
   autoLockOnBackground: boolean;
   autoLockIdleMinutes: number;
@@ -7,6 +9,7 @@ export interface EncryptedFoldersSettings {
   telemetryEnabled: boolean;
   telemetryId?: string;
   telemetryNoticeSeen?: boolean;
+  masterPassword?: MasterPasswordRecord | null;
 }
 
 export const DEFAULT_SETTINGS: EncryptedFoldersSettings = {
@@ -36,6 +39,9 @@ export function sanitizeSettings(
   }
   if (settings.telemetryId !== undefined && typeof settings.telemetryId !== 'string') {
     settings.telemetryId = undefined;
+  }
+  if (settings.masterPassword !== undefined && settings.masterPassword !== null) {
+    settings.masterPassword = isMasterPasswordRecord(settings.masterPassword) ? settings.masterPassword : null;
   }
   return settings;
 }

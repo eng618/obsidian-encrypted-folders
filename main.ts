@@ -45,6 +45,13 @@ export default class EncryptedFoldersPlugin extends Plugin {
     this.fileService = new FileService(this.app.vault, (file) => this.app.fileManager.trashFile(file));
     this.folderService = new FolderService(this.encryptionService, this.fileService, this.app, {
       telemetry: this.telemetryService,
+      masterPasswordStore: {
+        load: () => this.settings.masterPassword ?? null,
+        save: async (record) => {
+          this.settings.masterPassword = record;
+          await this.saveData(this.settings);
+        },
+      },
     });
     this.folderService.setDebugLogging(this.settings.debugLogging);
     this.folderService.setAutoLockSettings({
