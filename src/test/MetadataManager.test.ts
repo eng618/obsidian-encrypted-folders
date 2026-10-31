@@ -181,6 +181,20 @@ describe('MetadataManager', () => {
     expect(() => metadataManager.parseMetadata(JSON.stringify({ ...valid, passwordLabel: 'x'.repeat(81) }))).toThrow(
       /passwordLabel/,
     );
+    expect(() => metadataManager.parseMetadata(JSON.stringify({ ...valid, previousSalt: 'c2FsdA==' }))).toThrow(
+      /previousWrappedMasterKey/,
+    );
+    expect(() =>
+      metadataManager.parseMetadata(
+        JSON.stringify({
+          ...valid,
+          previousSalt: 'c2FsdA==',
+          previousWrappedMasterKey: 'd3JhcHBlZA==',
+          previousMasterKeyIV: 'aXY=',
+          previousIterations: 600000,
+        }),
+      ),
+    ).not.toThrow();
   });
 
   test('macsEqual compares in constant time and fails closed', () => {

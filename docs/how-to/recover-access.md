@@ -22,6 +22,8 @@ An incorrect password shows an error notification and leaves files encrypted. Af
 3. Type the folder name to confirm.
 4. Files return to plaintext and the metadata files (`obsidian-folder-meta.json`, `README_ENCRYPTED.md`) are deleted.
 
+If any file cannot be decrypted, removal stops. Those files stay `.locked`, and the metadata file stays so they can still be recovered. Repair or restore the remaining files, then run removal again. The notice reports how many encrypted files are left.
+
 ## Protect yourself in advance
 
 - Store the recovery key in a password manager the moment it is shown — confirmation is required before the dialog closes.

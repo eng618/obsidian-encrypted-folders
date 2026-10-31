@@ -52,6 +52,13 @@ export interface FolderPasswordSummary {
   label?: string;
 }
 
+export interface MasterPasswordChangeResult {
+  rotated: number;
+  total: number;
+  /** Folders whose previous password wrap could not be deleted yet. */
+  previousWrapsRemaining: number;
+}
+
 export type FolderLockVia = 'manual' | 'background' | 'idle' | 'unload';
 
 export class FolderService {
@@ -621,6 +628,132 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
   }
 
+  private async masterVerifierMatches(record: MasterPasswordRecord, encryptionKey: CryptoKey): Promise<boolean> {
+    try {
+      const ciphertext = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.verifier));
+      const iv = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.verifierIV));
+      const plaintext = await this.encryptionService.decryptWithKey(ciphertext, encryptionKey, iv);
+      return new TextDecoder().decode(plaintext) === MASTER_VERIFIER_PHRASE;
+    } catch {
+      return false;
+    }
+  }
+
+  private async encryptKnownPhrase(
+    encryptionKey: CryptoKey,
+    phrase: string,
+  ): Promise<{ verifier: string; verifierIV: string }> {
+    const result = await this.encryptionService.encryptWithKey(new TextEncoder().encode(phrase).buffer, encryptionKey);
+    return {
+      verifier: this.metadataManager.arrayBufferToBase64(result.ciphertext),
+      verifierIV: this.metadataManager.arrayBufferToBase64(result.iv),
+    };
+  }
+
+  private async decryptRecoveryEnvelope(record: MasterPasswordRecord, encryptionKey: CryptoKey): Promise<string> {
+    const ciphertext = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.recoveryKeyEnvelope));
+    const iv = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.recoveryKeyEnvelopeIV));
+    const plaintext = await this.encryptionService.decryptWithKey(ciphertext, encryptionKey, iv);
+    return new TextDecoder().decode(plaintext);
+  }
+
+  private hasPreviousPasswordWrap(metadata: FolderMetadata): boolean {
+    return (
+      typeof metadata.previousSalt === 'string' &&
+      metadata.previousSalt.length > 0 &&
+      typeof metadata.previousWrappedMasterKey === 'string' &&
+      metadata.previousWrappedMasterKey.length > 0 &&
+      typeof metadata.previousMasterKeyIV === 'string' &&
+      metadata.previousMasterKeyIV.length > 0
+    );
+  }
+
+  /** View the stored previous wrap as the current slot, with no further fallback. */
+  private metadataWithPreviousWrap(metadata: FolderMetadata): FolderMetadata {
+    return {
+      ...metadata,
+      salt: metadata.previousSalt ?? metadata.salt,
+      iterations: metadata.previousIterations ?? metadata.iterations,
+      wrappedMasterKey: metadata.previousWrappedMasterKey ?? metadata.wrappedMasterKey,
+      masterKeyIV: metadata.previousMasterKeyIV ?? metadata.masterKeyIV,
+      mac: metadata.previousMac,
+      previousSalt: undefined,
+      previousIterations: undefined,
+      previousWrappedMasterKey: undefined,
+      previousMasterKeyIV: undefined,
+      previousMac: undefined,
+    };
+  }
+
+  private stripPreviousPasswordWrap(metadata: FolderMetadata): FolderMetadata {
+    return {
+      ...metadata,
+      previousSalt: undefined,
+      previousIterations: undefined,
+      previousWrappedMasterKey: undefined,
+      previousMasterKeyIV: undefined,
+      previousMac: undefined,
+    };
+  }
+
+  /**
+   * Drops previous password wraps once the saved master record uses the
+   * same salt as the folder's current wrap. Safe to retry: a crash between
+   * the settings save and this delete leaves both passwords working.
+   */
+  private async clearCommittedPreviousWraps(): Promise<{ remaining: number }> {
+    const record = this.masterPasswordStore?.load();
+    if (!record?.salt) {
+      return { remaining: 0 };
+    }
+
+    let remaining = 0;
+    const summaries = await this.listFolderPasswordKinds();
+    for (const summary of summaries) {
+      if (summary.kind !== 'master') {
+        continue;
+      }
+      const folder = this.fileService.getAbstractFileByPath(summary.path);
+      if (!(folder instanceof TFolder)) {
+        continue;
+      }
+      let metadata: FolderMetadata | null;
+      try {
+        metadata = await this.readMetadata(folder);
+      } catch {
+        remaining += 1;
+        continue;
+      }
+      if (!metadata || !this.hasPreviousPasswordWrap(metadata)) {
+        continue;
+      }
+      if (metadata.salt !== record.salt) {
+        remaining += 1;
+        continue;
+      }
+      try {
+        await this.writeMetadata(folder.path, this.stripPreviousPasswordWrap(metadata));
+      } catch {
+        remaining += 1;
+      }
+    }
+    return { remaining };
+  }
+
+  private async restoreMetadataSnapshots(
+    snapshots: { folder: TFolder; metadata: FolderMetadata }[],
+  ): Promise<string[]> {
+    const failed: string[] = [];
+    for (const snapshot of snapshots) {
+      try {
+        await this.writeMetadata(snapshot.folder.path, snapshot.metadata);
+      } catch {
+        failed.push(snapshot.folder.path);
+      }
+    }
+    return failed;
+  }
+
   async setupMasterPassword(password: string, recoveryKey?: string): Promise<string> {
     const store = this.requireMasterStore();
     if (store.load()) {
@@ -661,52 +794,75 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
    * Only the small wrapped-key blobs are re-encrypted; file contents are
    * untouched and folders may stay locked throughout.
    */
-  async changeMasterPassword(oldPassword: string, newPassword: string): Promise<{ rotated: number; total: number }> {
+  async changeMasterPassword(oldPassword: string, newPassword: string): Promise<MasterPasswordChangeResult> {
     const store = this.requireMasterStore();
     const record = store.load();
     if (!record) {
       throw new Error('Master password is not set up.');
     }
     this.assertMasterPasswordStrength(newPassword);
-    if (!(await this.verifyMasterRecord(record, oldPassword))) {
+
+    const oldSalt = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.salt));
+    const { encryptionKey: oldKey } = await this.encryptionService.deriveSecretKeys(oldPassword, oldSalt);
+    if (!(await this.masterVerifierMatches(record, oldKey))) {
       throw new Error('Incorrect current master password.');
     }
+    const recoveryKey = await this.decryptRecoveryEnvelope(record, oldKey);
 
     const summaries = await this.listFolderPasswordKinds();
     const masterPaths = summaries.filter((s) => s.kind === 'master').map((s) => s.path);
 
-    const newSalt = this.encryptionService.generateSalt();
-    let rotated = 0;
+    // One salt for this rotation. Each wrap still uses a fresh IV.
+    // Per-folder salts return on the next convert or custom-password change.
+    const newSaltBytes = this.encryptionService.generateSalt();
+    const newSalt = this.metadataManager.arrayBufferToBase64(newSaltBytes);
+    const { encryptionKey: newKey, hmacKey: newHmac } = await this.encryptionService.deriveSecretKeys(
+      newPassword,
+      newSaltBytes,
+    );
+
+    const snapshots: { folder: TFolder; metadata: FolderMetadata }[] = [];
     const errors: { path: string; error: unknown }[] = [];
+    const unrestoredWrites: string[] = [];
     for (const path of masterPaths) {
       const folder = this.fileService.getAbstractFileByPath(path);
       if (!(folder instanceof TFolder)) {
         continue;
       }
+      let metadata: FolderMetadata | null = null;
       try {
-        const metadata = await this.readMetadata(folder);
+        metadata = await this.readMetadata(folder);
         if (!metadata) {
           throw new Error('Missing metadata.');
         }
+        const snapshot = metadata;
         const { masterKeyRaw } = await this.getMasterKeyFromSecret(metadata, oldPassword, false);
-        const { encryptionKey: newKey, hmacKey: newHmac } = await this.encryptionService.deriveSecretKeys(
-          newPassword,
-          newSalt,
-        );
-        // NOTE: folders created at different times share the rotation salt
-        // here; each wrap still uses a fresh random IV. Per-folder salts
-        // return on the next convert/password-change of that folder.
         const rewrapped = await this.encryptionService.encryptWithKey(masterKeyRaw, newKey);
         const next: FolderMetadata = {
           ...metadata,
-          salt: this.metadataManager.arrayBufferToBase64(newSalt),
+          salt: newSalt,
           iterations: MASTER_KDF_ITERATIONS,
           wrappedMasterKey: this.metadataManager.arrayBufferToBase64(rewrapped.ciphertext),
           masterKeyIV: this.metadataManager.arrayBufferToBase64(rewrapped.iv),
+          previousSalt: metadata.salt,
+          previousIterations: metadata.iterations,
+          previousWrappedMasterKey: metadata.wrappedMasterKey,
+          previousMasterKeyIV: metadata.masterKeyIV,
+          previousMac: metadata.mac,
         };
         next.mac = await this.metadataManager.computeMetadataMacWithKey(next, newHmac);
-        await this.writeMetadata(folder.path, next);
-        rotated++;
+        try {
+          await this.writeMetadata(folder.path, next);
+          snapshots.push({ folder, metadata: snapshot });
+        } catch (writeError: unknown) {
+          try {
+            await this.writeMetadata(folder.path, snapshot);
+          } catch (restoreError: unknown) {
+            unrestoredWrites.push(path);
+            this.debug('master rotation restore after failed write failed', { path, error: String(restoreError) });
+          }
+          throw writeError;
+        }
       } catch (error: unknown) {
         errors.push({ path, error });
         this.debug('master rotation failed for folder', { path, error: String(error) });
@@ -714,30 +870,45 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
     }
 
     if (errors.length > 0) {
-      throw new Error(
-        `Rotated ${rotated} of ${masterPaths.length} folders. Failed: ${errors.map((e) => e.path).join(', ')}`,
-      );
+      const unrestored = [...unrestoredWrites, ...(await this.restoreMetadataSnapshots(snapshots))];
+      const failedPaths = errors.map((entry) => entry.path).join(', ');
+      const restoreNote =
+        unrestored.length > 0
+          ? ` Could not restore: ${unrestored.join(', ')}. The recovery key still opens those folders.`
+          : ' Rewritten folders were restored.';
+      throw new Error(`Master password was not changed. Failed: ${failedPaths}.${restoreNote}`);
     }
 
-    const { verifier, verifierIV } = await this.buildMasterVerifier(newPassword, newSalt);
-    const { encryptionKey: envelopeKey } = await this.encryptionService.deriveSecretKeys(newPassword, newSalt);
-    const recoveryKey = await this.unwrapMasterRecoveryKey(oldPassword);
-    const envelope = await this.encryptionService.encryptWithKey(
-      new TextEncoder().encode(recoveryKey).buffer,
-      envelopeKey,
-    );
-    await store.save({
-      ...record,
-      salt: this.metadataManager.arrayBufferToBase64(newSalt),
-      verifier,
-      verifierIV,
-      iterations: MASTER_KDF_ITERATIONS,
-      recoveryKeyEnvelope: this.metadataManager.arrayBufferToBase64(envelope.ciphertext),
-      recoveryKeyEnvelopeIV: this.metadataManager.arrayBufferToBase64(envelope.iv),
-      updatedAt: Date.now(),
-    });
+    const { verifier, verifierIV } = await this.encryptKnownPhrase(newKey, MASTER_VERIFIER_PHRASE);
+    const envelope = await this.encryptionService.encryptWithKey(new TextEncoder().encode(recoveryKey).buffer, newKey);
+    try {
+      await store.save({
+        ...record,
+        salt: newSalt,
+        verifier,
+        verifierIV,
+        iterations: MASTER_KDF_ITERATIONS,
+        recoveryKeyEnvelope: this.metadataManager.arrayBufferToBase64(envelope.ciphertext),
+        recoveryKeyEnvelopeIV: this.metadataManager.arrayBufferToBase64(envelope.iv),
+        updatedAt: Date.now(),
+      });
+    } catch (error: unknown) {
+      const unrestored = await this.restoreMetadataSnapshots(snapshots);
+      const reason = error instanceof Error ? error.message : String(error);
+      const restoreNote =
+        unrestored.length > 0
+          ? ` Could not restore: ${unrestored.join(', ')}. The recovery key still opens those folders.`
+          : ' Folder wraps were restored.';
+      throw new Error(`Master password was not changed.${restoreNote} Settings save failed: ${reason}`);
+    }
+
+    const cleanup = await this.clearCommittedPreviousWraps();
     this.telemetry?.trackEvent('master_password_changed', { folder_count_bucket: bucketCount(masterPaths.length) });
-    return { rotated, total: masterPaths.length };
+    return {
+      rotated: snapshots.length,
+      total: masterPaths.length,
+      previousWrapsRemaining: cleanup.remaining,
+    };
   }
 
   async removeMasterPassword(password: string): Promise<void> {
@@ -1412,6 +1583,8 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       return;
     }
 
+    await this.clearCommittedPreviousWraps();
+
     this.debug('syncFolders complete', { discovered: this.encryptedFolders.size });
   }
 
@@ -1466,6 +1639,25 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   }
 
   private async getMasterKeyFromSecret(
+    metadata: FolderMetadata,
+    secret: string,
+    isRecovery: boolean,
+    cache?: KeyDerivationCache,
+  ): Promise<{ masterKey: CryptoKey; hmacKey: CryptoKey; masterKeyRaw: ArrayBuffer }> {
+    try {
+      return await this.unwrapMasterKeySlot(metadata, secret, isRecovery, cache);
+    } catch (error: unknown) {
+      if (isRecovery || !this.hasPreviousPasswordWrap(metadata)) {
+        throw error;
+      }
+      // The current wrap was rewritten during a master-password rotation
+      // whose settings save or cleanup has not finished. The previous wrap
+      // still opens the folder with the old password.
+      return await this.unwrapMasterKeySlot(this.metadataWithPreviousWrap(metadata), secret, false, cache);
+    }
+  }
+
+  private async unwrapMasterKeySlot(
     metadata: FolderMetadata,
     secret: string,
     isRecovery: boolean,
@@ -1792,6 +1984,13 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       if (!unlocked) {
         return false;
       }
+    }
+
+    const remainingLocked = this.countLockedFiles(folder);
+    if (remainingLocked > 0) {
+      throw new Error(
+        `Cannot remove encryption while ${remainingLocked} encrypted file(s) remain. Restore or repair them, then try again.`,
+      );
     }
 
     const metaFile = this.fileService.getFile(this.metadataManager.getMetaPath(folder.path));

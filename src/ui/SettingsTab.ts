@@ -276,11 +276,18 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
           'New master password',
           async (newPassword) => {
             try {
-              const { rotated, total } = await this.plugin.folderService.changeMasterPassword(oldPassword, newPassword);
-              new Notice(
+              const { rotated, total, previousWrapsRemaining } = await this.plugin.folderService.changeMasterPassword(
+                oldPassword,
+                newPassword,
+              );
+              const changed =
                 total === 0
                   ? 'Master password changed.'
-                  : `Master password changed. ${rotated} of ${total} folders re-wrapped.`,
+                  : `Master password changed. ${rotated} of ${total} folders re-wrapped.`;
+              new Notice(
+                previousWrapsRemaining > 0
+                  ? `${changed} Backup wraps remain and will be cleared on the next folder sync.`
+                  : changed,
               );
               return true;
             } catch (e) {

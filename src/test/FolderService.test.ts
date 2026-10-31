@@ -965,6 +965,25 @@ describe('FolderService Integration', () => {
     expect(metadata.lastError).toMatch(/Partial decrypt/);
   });
 
+  it('should keep metadata when removal is attempted with locked files remaining', async () => {
+    const folder = addFolder('partial-remove');
+    addFile(folder, 'good.md', 'good content');
+    addFile(folder, 'bad.md', 'bad content');
+    await folderService.createEncryptedFolder(folder, 'password123', true);
+
+    const corruptLocked = app.vault.getAbstractFileByPath('partial-remove/bad.md.locked') as TFile;
+    await app.vault.modifyBinary(corruptLocked, new TextEncoder().encode('ENC!invalid_ciphertext_bytes').buffer);
+
+    await expect(folderService.removeEncryption(folder, 'password123')).rejects.toThrow(/encrypted file/);
+    expect(folderService.isEncryptedFolder(folder)).toBe(true);
+    expect(app.vault.getAbstractFileByPath('partial-remove/obsidian-folder-meta.json')).not.toBeNull();
+    expect(app.vault.getAbstractFileByPath('partial-remove/bad.md.locked')).not.toBeNull();
+    expect(app.vault.getAbstractFileByPath('partial-remove/good.md')).not.toBeNull();
+
+    await expect(folderService.removeEncryption(folder)).rejects.toThrow(/encrypted file/);
+    expect(app.vault.getAbstractFileByPath('partial-remove/obsidian-folder-meta.json')).not.toBeNull();
+  });
+
   it('should encrypt each file with one read, one staged write, and one rename', async () => {
     const folder = addFolder('op-count');
     addFile(folder, 'a.md', 'aaa');

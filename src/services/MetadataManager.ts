@@ -115,6 +115,29 @@ export class MetadataManager {
     ) {
       fail('expectedLockedFiles must be a non-negative number');
     }
+    const previousFields = ['previousSalt', 'previousWrappedMasterKey', 'previousMasterKeyIV', 'previousMac'] as const;
+    const hasPreviousWrap = previousFields.some((field) => metadata[field] !== undefined);
+    if (hasPreviousWrap) {
+      for (const field of ['previousSalt', 'previousWrappedMasterKey', 'previousMasterKeyIV'] as const) {
+        if (typeof metadata[field] !== 'string' || metadata[field].length === 0) {
+          fail(`${field} must be a non-empty string when a previous password wrap is present`);
+        }
+      }
+      if (
+        metadata.previousMac !== undefined &&
+        (typeof metadata.previousMac !== 'string' || metadata.previousMac.length === 0)
+      ) {
+        fail('previousMac must be a non-empty string');
+      }
+      if (
+        metadata.previousIterations !== undefined &&
+        (typeof metadata.previousIterations !== 'number' ||
+          !Number.isFinite(metadata.previousIterations) ||
+          metadata.previousIterations < this.MIN_KDF_ITERATIONS)
+      ) {
+        fail(`previousIterations must be >= ${this.MIN_KDF_ITERATIONS}`);
+      }
+    }
 
     return parsed as FolderMetadata;
   }

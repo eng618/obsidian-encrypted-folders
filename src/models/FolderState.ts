@@ -29,6 +29,16 @@ export interface FolderMetadata {
   wrappedMasterKeyMasterRecovery?: string; // Folder master key wrapped with shared master recovery key
   masterRecoveryIV?: string; // IV for the shared master recovery wrapping
   masterRecoveryMac?: string; // HMAC for the shared master recovery wrapping
+  /**
+   * Previous password wrap. Present only while a master-password rotation
+   * has rewritten the current wrap and the new verifier is not yet durable,
+   * or until the cleanup write finishes. Not a long-term second password.
+   */
+  previousSalt?: string;
+  previousIterations?: number;
+  previousWrappedMasterKey?: string;
+  previousMasterKeyIV?: string;
+  previousMac?: string;
   state?: FolderLifecycleState;
   lastTransitionAt?: number;
   lastError?: string;

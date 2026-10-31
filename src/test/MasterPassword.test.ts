@@ -38,6 +38,7 @@ describe('FolderService master password flows', () => {
   let fileService: FileService;
   let folderService: FolderService;
   let masterRecord: MasterPasswordRecord | null;
+  let failMasterSave = false;
 
   const addFolder = (path: string): TFolder => {
     const folder = new TFolder();
@@ -65,10 +66,14 @@ describe('FolderService master password flows', () => {
     encryptionService = new EncryptionService();
     fileService = new FileService(app.vault, (file) => app.fileManager.trashFile(file));
     masterRecord = null;
+    failMasterSave = false;
     folderService = new FolderService(encryptionService, fileService, app, {
       masterPasswordStore: {
         load: () => masterRecord,
         save: async (record) => {
+          if (failMasterSave) {
+            throw new Error('settings write failed');
+          }
           masterRecord = record;
         },
       },
@@ -150,9 +155,14 @@ describe('FolderService master password flows', () => {
       label: 'Personal',
     });
 
-    const { rotated, total } = await folderService.changeMasterPassword('old-master-123', 'new-master-456');
+    const { rotated, total, previousWrapsRemaining } = await folderService.changeMasterPassword(
+      'old-master-123',
+      'new-master-456',
+    );
     expect(total).toBe(1);
     expect(rotated).toBe(1);
+    expect(previousWrapsRemaining).toBe(0);
+    expect((await folderService.readFolderMetadata(masterFolder))?.previousWrappedMasterKey).toBeUndefined();
 
     expect(await folderService.unlockFolderWithAutoDetect(masterFolder, 'new-master-456')).toBe(true);
     await folderService.lockFolder(masterFolder);
@@ -166,6 +176,112 @@ describe('FolderService master password flows', () => {
 
     await expect(folderService.changeMasterPassword('wrong-old', 'another-new-1')).rejects.toThrow(/Incorrect/);
   });
+
+  test('changeMasterPassword restores folders when a later write fails', async () => {
+    await folderService.setupMasterPassword('old-master-123');
+    const masterRecoveryKey = await folderService.unwrapMasterRecoveryKey('old-master-123');
+    const first = addFolder('rotate-a');
+    addFile(first, 'a.md', 'aaa');
+    const second = addFolder('rotate-b');
+    addFile(second, 'b.md', 'bbb');
+    await folderService.createEncryptedFolder(first, 'old-master-123', true, undefined, {
+      kind: 'master',
+      masterRecoveryKey,
+    });
+    await folderService.createEncryptedFolder(second, 'old-master-123', true, undefined, {
+      kind: 'master',
+      masterRecoveryKey,
+    });
+    const before = await folderService.readFolderMetadata(first);
+    const deriveSpy = vi.spyOn(encryptionService, 'deriveSecretKeys');
+    const originalWrite = fileService.writeBinary.bind(fileService);
+    let failNextSecondWrite = true;
+    fileService.writeBinary = async (path, data) => {
+      if (failNextSecondWrite && path === 'rotate-b/obsidian-folder-meta.json') {
+        failNextSecondWrite = false;
+        throw new Error('disk full');
+      }
+      return originalWrite(path, data);
+    };
+
+    await expect(folderService.changeMasterPassword('old-master-123', 'new-master-456')).rejects.toThrow(
+      /was not changed/,
+    );
+
+    // One derivation for the current master record, one for the new key,
+    // and one per folder to unwrap its own salt. Not one per folder for the new key.
+    expect(deriveSpy).toHaveBeenCalledTimes(4);
+    deriveSpy.mockRestore();
+    expect(await folderService.verifyMasterPassword('old-master-123')).toBe(true);
+    expect(await folderService.verifyMasterPassword('new-master-456')).toBe(false);
+    const after = await folderService.readFolderMetadata(first);
+    expect(after?.salt).toBe(before?.salt);
+    expect(after?.wrappedMasterKey).toBe(before?.wrappedMasterKey);
+    expect(after?.previousWrappedMasterKey).toBeUndefined();
+    expect(await folderService.verifyFolderSecret(first, 'old-master-123')).toBe(true);
+    expect(await folderService.verifyFolderSecret(second, 'old-master-123')).toBe(true);
+  }, 30000);
+
+  test('changeMasterPassword restores folders when the settings save fails', async () => {
+    await folderService.setupMasterPassword('old-master-123');
+    const masterRecoveryKey = await folderService.unwrapMasterRecoveryKey('old-master-123');
+    const folder = addFolder('save-fail');
+    addFile(folder, 'a.md', 'aaa');
+    await folderService.createEncryptedFolder(folder, 'old-master-123', true, undefined, {
+      kind: 'master',
+      masterRecoveryKey,
+    });
+    const before = await folderService.readFolderMetadata(folder);
+    failMasterSave = true;
+
+    await expect(folderService.changeMasterPassword('old-master-123', 'new-master-456')).rejects.toThrow(
+      /Settings save failed/,
+    );
+
+    expect(await folderService.verifyMasterPassword('old-master-123')).toBe(true);
+    const after = await folderService.readFolderMetadata(folder);
+    expect(after?.salt).toBe(before?.salt);
+    expect(after?.wrappedMasterKey).toBe(before?.wrappedMasterKey);
+    expect(after?.previousWrappedMasterKey).toBeUndefined();
+    expect(await folderService.verifyFolderSecret(folder, 'old-master-123')).toBe(true);
+  }, 30000);
+
+  test('previous password wrap keeps the old password working until sync clears it', async () => {
+    await folderService.setupMasterPassword('old-master-123');
+    const masterRecoveryKey = await folderService.unwrapMasterRecoveryKey('old-master-123');
+    const folder = addFolder('cleanup-later');
+    addFile(folder, 'a.md', 'aaa');
+    await folderService.createEncryptedFolder(folder, 'old-master-123', true, undefined, {
+      kind: 'master',
+      masterRecoveryKey,
+    });
+
+    const originalWrite = fileService.writeBinary.bind(fileService);
+    let rejectCleanup = true;
+    fileService.writeBinary = async (path, data) => {
+      if (rejectCleanup && path.endsWith('obsidian-folder-meta.json')) {
+        const parsed = JSON.parse(new TextDecoder().decode(data)) as { previousWrappedMasterKey?: string };
+        if (!parsed.previousWrappedMasterKey) {
+          throw new Error('cleanup failed');
+        }
+      }
+      return originalWrite(path, data);
+    };
+
+    const result = await folderService.changeMasterPassword('old-master-123', 'new-master-456');
+    expect(result.previousWrapsRemaining).toBe(1);
+    expect((await folderService.readFolderMetadata(folder))?.previousWrappedMasterKey).toBeTruthy();
+    expect(await folderService.verifyFolderSecret(folder, 'new-master-456')).toBe(true);
+    expect(await folderService.verifyFolderSecret(folder, 'old-master-123')).toBe(true);
+
+    rejectCleanup = false;
+    fileService.writeBinary = originalWrite;
+    await folderService.syncFolders();
+    expect((await folderService.readFolderMetadata(folder))?.previousWrappedMasterKey).toBeUndefined();
+    expect(await folderService.verifyMasterPassword('new-master-456')).toBe(true);
+    expect(await folderService.verifyFolderSecret(folder, 'old-master-123')).toBe(false);
+    expect(await folderService.verifyFolderSecret(folder, 'new-master-456')).toBe(true);
+  }, 30000);
 
   test('removeMasterPassword is blocked while master folders exist', async () => {
     await folderService.setupMasterPassword('master-pass-123');
