@@ -91,7 +91,7 @@ describe('FolderService master password flows', () => {
     expect(await folderService.verifyMasterRecoveryKey(recoveryKey)).toBe(true);
     expect(await folderService.verifyMasterRecoveryKey('nope')).toBe(false);
     await expect(folderService.setupMasterPassword('another-123')).rejects.toThrow(/already set/);
-    await expect(folderService.setupMasterPassword('short')).rejects.toThrow();
+    await expect(folderService.setupMasterPassword('short')).rejects.toThrow(/already set/);
   });
 
   test('master folder round-trips with master password and auto-detect recovery', async () => {
@@ -343,7 +343,9 @@ describe('FolderService master password flows', () => {
     expect(await folderService.unlockFolder(folder, newRecovery, true)).toBe(true);
     const metadata = await folderService.readFolderMetadata(folder);
     expect(metadata?.passwordLabel).toBe('Diary');
-    await expect(folderService.changeCustomPassword(folder, 'wrong', 'another-new-1')).rejects.toThrow();
+    await expect(folderService.changeCustomPassword(folder, 'wrong', 'another-new-1')).rejects.toThrow(
+      /Authentication failed/,
+    );
   });
 
   test('relabelFolder requires secret while locked', async () => {
@@ -357,7 +359,7 @@ describe('FolderService master password flows', () => {
     await expect(folderService.relabelFolder(folder, 'New', 'wrong')).rejects.toThrow(/Authentication failed/);
     await folderService.relabelFolder(folder, '  New Title ', 'custom-pass-123');
     expect((await folderService.readFolderMetadata(folder))?.passwordLabel).toBe('New Title');
-    await expect(folderService.relabelFolder(folder, '   ')).rejects.toThrow();
+    await expect(folderService.relabelFolder(folder, '   ')).rejects.toThrow(/title is required/);
   });
 
   test('listFolderPasswordKinds summarizes folders', async () => {

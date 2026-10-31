@@ -1,5 +1,4 @@
 import type { App, Menu, TFolder } from 'obsidian';
-import { Notice } from 'obsidian';
 
 import type { FolderPasswordKind } from '../models/PasswordManagement';
 import { describePasswordKind } from '../models/PasswordManagement';
@@ -10,6 +9,7 @@ import { PasswordModal } from './PasswordModal';
 import { runWithProcessingModal } from './ProcessingRunner';
 import { RecoveryKeyModal } from './RecoveryKeyModal';
 import { RemovalModal } from './RemovalModal';
+import { showNotice } from './UIUtils';
 
 export interface FolderMenuDeps {
   app: App;
@@ -59,7 +59,7 @@ export function registerFolderMenu(menu: Menu, folder: TFolder, deps: FolderMenu
                     kind: 'master',
                     masterRecoveryKey,
                   }));
-              new Notice('Folder encrypted with your master password. Your master recovery key covers it.');
+              showNotice('Folder encrypted with your master password. Your master recovery key covers it.');
               return true;
             }
             const recoveryKey = lockImmediately
@@ -76,9 +76,9 @@ export function registerFolderMenu(menu: Menu, folder: TFolder, deps: FolderMenu
             new RecoveryKeyModal(deps.app, recoveryKey).open();
 
             if (lockImmediately) {
-              new Notice('Folder encrypted and locked.');
+              showNotice('Folder encrypted and locked.');
             } else {
-              new Notice('Folder initialized. Ready for encryption.');
+              showNotice('Folder initialized. Ready for encryption.');
             }
             return true;
           },
@@ -215,12 +215,12 @@ function registerEncryptedMenu(menu: Menu, folder: TFolder, deps: FolderMenuDeps
               try {
                 const success = await folderService.removeEncryption(folder, password);
                 if (success) {
-                  new Notice('Encryption removed. Folder is now plaintext.');
+                  showNotice('Encryption removed. Folder is now plaintext.');
                 } else if (isLocked) {
-                  new Notice('Incorrect password.');
+                  showNotice('Incorrect password.');
                 }
               } catch (e) {
-                new Notice(`Removal failed: ${e instanceof Error ? e.message : 'An unexpected error occurred'}`);
+                showNotice(`Removal failed: ${e instanceof Error ? e.message : 'An unexpected error occurred'}`);
               }
             },
             badge,
@@ -242,11 +242,11 @@ function registerPasswordManagementItems(menu: Menu, folder: TFolder, deps: Fold
         void (async () => {
           const metadata = await folderService.readFolderMetadata(folder);
           if (folderService.getFolderPasswordKind(metadata) === 'master') {
-            new Notice('This folder already uses the master password.');
+            showNotice('This folder already uses the master password.');
             return;
           }
           if (!folderService.hasMasterPassword()) {
-            new Notice('Set up a master password in settings first.');
+            showNotice('Set up a master password in settings first.');
             return;
           }
           // Step 1: prove ownership with whichever secret the user has.
@@ -280,7 +280,7 @@ function registerPasswordManagementItems(menu: Menu, folder: TFolder, deps: Fold
         void (async () => {
           const metadata = await folderService.readFolderMetadata(folder);
           if (folderService.getFolderPasswordKind(metadata) !== 'master') {
-            new Notice('This folder already uses a custom password.');
+            showNotice('This folder already uses a custom password.');
             return;
           }
           // Step 1: prove knowledge of the master password.
@@ -311,7 +311,7 @@ function registerPasswordManagementItems(menu: Menu, folder: TFolder, deps: Fold
         void (async () => {
           const metadata = await folderService.readFolderMetadata(folder);
           if (folderService.getFolderPasswordKind(metadata) !== 'custom') {
-            new Notice('This folder uses the master password. Switch to custom first to set a unique password.');
+            showNotice('This folder uses the master password. Switch to custom first to set a unique password.');
             return;
           }
           new PasswordModal(
@@ -341,7 +341,7 @@ function registerPasswordManagementItems(menu: Menu, folder: TFolder, deps: Fold
         void (async () => {
           const metadata = await folderService.readFolderMetadata(folder);
           if (folderService.getFolderPasswordKind(metadata) !== 'custom') {
-            new Notice('Only custom passwords have titles.');
+            showNotice('Only custom passwords have titles.');
             return;
           }
           const openLabelModal = (verifiedSecret?: string) => {
@@ -351,7 +351,7 @@ function registerPasswordManagementItems(menu: Menu, folder: TFolder, deps: Fold
               async (_password, _lock, label) => {
                 try {
                   await folderService.relabelFolder(folder, label ?? '', verifiedSecret);
-                  new Notice('Password title updated.');
+                  showNotice('Password title updated.');
                   return true;
                 } catch (e) {
                   throw e instanceof Error ? e : new Error(String(e));
@@ -399,7 +399,7 @@ function openMasterEntry(folder: TFolder, deps: FolderMenuDeps, currentSecret: s
     async (masterPassword) => {
       try {
         await folderService.convertToMaster(folder, currentSecret, masterPassword);
-        new Notice('Folder now uses the master password. The old custom password and its recovery key no longer work.');
+        showNotice('Folder now uses the master password. The old custom password and its recovery key no longer work.');
         return true;
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
@@ -427,7 +427,7 @@ function openCustomEntry(folder: TFolder, deps: FolderMenuDeps, masterPassword: 
       try {
         const recoveryKey = await folderService.convertToCustom(folder, masterPassword, newPassword, label ?? '');
         new RecoveryKeyModal(app, recoveryKey).open();
-        new Notice('Folder now uses a custom password. Save the new recovery key.');
+        showNotice('Folder now uses a custom password. Save the new recovery key.');
         return true;
       } catch (e) {
         throw e instanceof Error ? e : new Error(String(e));
@@ -452,7 +452,7 @@ function openNewCustomPassword(folder: TFolder, deps: FolderMenuDeps, currentSec
       try {
         const recoveryKey = await folderService.changeCustomPassword(folder, currentSecret, newPassword);
         new RecoveryKeyModal(app, recoveryKey).open();
-        new Notice('Custom password changed. Save the new recovery key — the old one no longer works.');
+        showNotice('Custom password changed. Save the new recovery key — the old one no longer works.');
         return true;
       } catch (e) {
         throw e instanceof Error ? e : new Error(String(e));

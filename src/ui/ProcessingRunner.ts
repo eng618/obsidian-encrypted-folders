@@ -1,9 +1,9 @@
-import type { App} from 'obsidian';
-import { Notice } from 'obsidian';
+import type { App } from 'obsidian';
 
 import type { FolderProcessingOptions } from '../services/FolderService';
 import { createAbortError, isAbortError } from '../utils/abort';
 import { ProcessingModal } from './ProcessingModal';
+import { showNotice } from './UIUtils';
 
 export async function runWithProcessingModal<T>(
   app: App,
@@ -25,7 +25,7 @@ export async function runWithProcessingModal<T>(
     });
   } catch (error: unknown) {
     if (isAbortError(error)) {
-      new Notice('Operation cancelled.');
+      showNotice('Operation cancelled.');
     }
     throw error;
   } finally {

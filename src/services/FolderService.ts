@@ -1,10 +1,8 @@
-import type { App, TFile} from 'obsidian';
+import type { App, TFile } from 'obsidian';
 import { TFolder, normalizePath } from 'obsidian';
 
 import type { FolderLifecycleState, FolderMetadata } from '../models/FolderState';
-import type {
-  FolderPasswordKind,
-  MasterPasswordRecord} from '../models/PasswordManagement';
+import type { FolderPasswordKind, MasterPasswordRecord } from '../models/PasswordManagement';
 import {
   MASTER_KDF_ITERATIONS,
   MASTER_VERIFIER_PHRASE,
@@ -15,7 +13,7 @@ import type { AutoLockSettings, IdleLockCountdown } from './AutoLockManager';
 import { AutoLockManager } from './AutoLockManager';
 import type { FolderProcessingOptions } from './BatchProcessor';
 import { BatchProcessor } from './BatchProcessor';
-import type { EncryptionService} from './EncryptionService';
+import type { EncryptionService } from './EncryptionService';
 import { KeyDerivationCache } from './EncryptionService';
 import type { FileService } from './FileService';
 import { MetadataManager } from './MetadataManager';
@@ -187,10 +185,12 @@ export class FolderService {
     }
 
     if (data === undefined) {
+      // oxlint-disable-next-line no-console -- debug() is the opt-in logging sink
       console.debug(`[EncryptedFolders] ${message}`);
       return;
     }
 
+    // oxlint-disable-next-line no-console -- debug() is the opt-in logging sink
     console.debug(`[EncryptedFolders] ${message}`, data);
   }
 
@@ -419,7 +419,10 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       masterRecoveryKey = passwordOptions.masterRecoveryKey;
     }
 
-    const recoveryKey = kind === 'master' ? masterRecoveryKey! : this.generateRecoveryKey();
+    const recoveryKey = kind === 'master' ? masterRecoveryKey : this.generateRecoveryKey();
+    if (recoveryKey === undefined) {
+      throw new Error('Master recovery key material is required to encrypt with the master password.');
+    }
     const tempExportableKey = await this.encryptionService.generateMasterKey(true);
     const masterKeyRaw = await this.encryptionService.exportKey(tempExportableKey);
     const masterKey = await this.encryptionService.importKey(masterKeyRaw, false);
@@ -469,7 +472,7 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
       }
       const masterRecoverySalt = new Uint8Array(this.metadataManager.base64ToArrayBuffer(record.recoverySalt));
       const { encryptionKey: sharedKey, hmacKey: sharedHmac } = await this.encryptionService.deriveSecretKeys(
-        masterRecoveryKey!,
+        recoveryKey,
         masterRecoverySalt,
       );
       const sharedWrapped = await this.encryptionService.encryptWithKey(masterKeyRaw, sharedKey);
@@ -538,7 +541,8 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
   // ---------------------------------------------------------------------------
 
   hasMasterPassword(): boolean {
-    return this.masterPasswordStore?.load() != null;
+    const record = this.masterPasswordStore?.load();
+    return record !== null && record !== undefined;
   }
 
   getMasterRecord(): MasterPasswordRecord | null {
@@ -905,7 +909,9 @@ This folder is currently encrypted and locked by the **Obsidian Encrypted Folder
         unrestored.length > 0
           ? ` Could not restore: ${unrestored.join(', ')}. The recovery key still opens those folders.`
           : ' Folder wraps were restored.';
-      throw new Error(`Master password was not changed.${restoreNote} Settings save failed: ${reason}`, { cause: error });
+      throw new Error(`Master password was not changed.${restoreNote} Settings save failed: ${reason}`, {
+        cause: error,
+      });
     }
 
     const cleanup = await this.clearCommittedPreviousWraps();

@@ -62,10 +62,10 @@ describe('Performance guards', () => {
 
   test('idle tick skips all countdown work when nothing is unlocked', async () => {
     const mockFolderService = {
-      getUnlockedFolderPaths: vi.fn(() => [] as string[]),
-      getNextIdleLockCountdown: vi.fn(() => null),
-      runIdleAutoLock: vi.fn(async () => false),
-      recordActivityForItem: vi.fn(),
+      getUnlockedFolderPaths: vi.fn<() => string[]>(() => []),
+      getNextIdleLockCountdown: vi.fn<() => null>(() => null),
+      runIdleAutoLock: vi.fn<() => Promise<boolean>>(async () => false),
+      recordActivityForItem: vi.fn<(...args: unknown[]) => void>(),
     };
     const controller = new IdleLockController(app, mockFolderService as any, () => 60);
 

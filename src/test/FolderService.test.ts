@@ -107,10 +107,11 @@ describe('FolderService Integration', () => {
     // Check file is decrypted and renamed back
     const decryptedFile = getOptionalTFile('secret/note.md');
     expect(decryptedFile).not.toBeNull();
-    if (decryptedFile) {
-      const decryptedData = await app.vault.readBinary(decryptedFile);
-      expect(new TextDecoder().decode(decryptedData)).toBe('my secret');
+    if (!decryptedFile) {
+      throw new Error('Expected decrypted file at secret/note.md');
     }
+    const decryptedData = await app.vault.readBinary(decryptedFile);
+    expect(new TextDecoder().decode(decryptedData)).toBe('my secret');
   });
 
   test('should pay one PBKDF2 per secret on create and unlock (split KDF)', async () => {
@@ -642,12 +643,7 @@ describe('FolderService Integration', () => {
       return originalRenameFile(file, newPath);
     };
 
-    try {
-      await folderService.createEncryptedFolder(folder, password, true);
-      expect('should have failed').toBe('failed');
-    } catch (e) {
-      expect(e).toBeDefined();
-    }
+    await expect(folderService.createEncryptedFolder(folder, password, true)).rejects.toThrow(/Disk full or crash/);
 
     // Restore original renameFile for verification
     fileService.renameFile = originalRenameFile;
@@ -655,18 +651,18 @@ describe('FolderService Integration', () => {
     // File 1 should have been rolled back to plaintext
     const restoredFile1 = getOptionalTFile('rollback-test/note1.md');
     expect(restoredFile1).not.toBeNull();
-    if (restoredFile1) {
-      const data = await app.vault.readBinary(restoredFile1);
-      expect(new TextDecoder().decode(data)).toBe('content 1');
+    if (!restoredFile1) {
+      throw new Error('Expected restored file at rollback-test/note1.md');
     }
+    expect(new TextDecoder().decode(await app.vault.readBinary(restoredFile1))).toBe('content 1');
 
     // File 2 should still be plaintext (never encrypted)
     const restoredFile2 = getOptionalTFile('rollback-test/note2.md');
     expect(restoredFile2).not.toBeNull();
-    if (restoredFile2) {
-      const data = await app.vault.readBinary(restoredFile2);
-      expect(new TextDecoder().decode(data)).toBe('content 2');
+    if (!restoredFile2) {
+      throw new Error('Expected restored file at rollback-test/note2.md');
     }
+    expect(new TextDecoder().decode(await app.vault.readBinary(restoredFile2))).toBe('content 2');
 
     // No .locked files should remain
     expect(app.vault.getAbstractFileByPath('rollback-test/note1.md.locked')).toBeNull();

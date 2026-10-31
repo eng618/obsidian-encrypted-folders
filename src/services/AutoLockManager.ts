@@ -81,7 +81,7 @@ export class AutoLockManager {
         };
       })
       .filter((countdown): countdown is IdleLockCountdown => countdown !== null)
-      .sort((a, b) => a.locksAt - b.locksAt);
+      .toSorted((a, b) => a.locksAt - b.locksAt);
   }
 
   getNextIdleLockCountdown(unlockedFolderPaths: string[], timestamp = Date.now()): IdleLockCountdown | null {

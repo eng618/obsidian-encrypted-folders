@@ -1,9 +1,13 @@
-import type { TFolder} from 'obsidian';
+import type { TFolder } from 'obsidian';
 import { normalizePath } from 'obsidian';
 
 import type { FolderLifecycleState, FolderMetadata } from '../models/FolderState';
 import type { EncryptionService } from './EncryptionService';
 import type { FileService } from './FileService';
+
+function invalidMetadata(reason: string): never {
+  throw new Error(`Encrypted folder metadata is invalid: ${reason}`);
+}
 
 export class MetadataManager {
   private readonly META_FILE_NAME = 'obsidian-folder-meta.json';
@@ -39,75 +43,72 @@ export class MetadataManager {
     }
 
     const metadata = parsed as Record<string, unknown>;
-    const fail = (reason: string): never => {
-      throw new Error(`Encrypted folder metadata is invalid: ${reason}`);
-    };
 
     if (typeof metadata.version !== 'number' || !Number.isFinite(metadata.version)) {
-      fail('version must be a number');
+      invalidMetadata('version must be a number');
     }
     if (typeof metadata.schemaVersion !== 'number' || !Number.isFinite(metadata.schemaVersion)) {
-      fail('schemaVersion must be a number');
+      invalidMetadata('schemaVersion must be a number');
     }
     if ((metadata.schemaVersion as number) > this.META_SCHEMA_VERSION) {
-      fail(`unsupported schemaVersion ${metadata.schemaVersion as number}`);
+      invalidMetadata(`unsupported schemaVersion ${metadata.schemaVersion as number}`);
     }
     if (typeof metadata.id !== 'string' || metadata.id.length === 0) {
-      fail('id must be a non-empty string');
+      invalidMetadata('id must be a non-empty string');
     }
     if (metadata.encryptionMethod !== 'AES-256-GCM') {
-      fail('unsupported encryptionMethod');
+      invalidMetadata('unsupported encryptionMethod');
     }
     if (metadata.kdfMethod !== 'PBKDF2-SHA256') {
-      fail('unsupported kdfMethod');
+      invalidMetadata('unsupported kdfMethod');
     }
     if (typeof metadata.salt !== 'string' || metadata.salt.length === 0) {
-      fail('salt must be a non-empty string');
+      invalidMetadata('salt must be a non-empty string');
     }
     if (typeof metadata.iterations !== 'number' || metadata.iterations < this.MIN_KDF_ITERATIONS) {
-      fail(`iterations must be >= ${this.MIN_KDF_ITERATIONS}`);
+      invalidMetadata(`iterations must be >= ${this.MIN_KDF_ITERATIONS}`);
     }
     if (typeof metadata.lockFile !== 'string' || metadata.lockFile.length === 0) {
-      fail('lockFile must be a non-empty string');
+      invalidMetadata('lockFile must be a non-empty string');
     }
     for (const field of ['testToken', 'wrappedMasterKey', 'masterKeyIV'] as const) {
       if (typeof metadata[field] !== 'string' || metadata[field].length === 0) {
-        fail(`${field} must be a non-empty string`);
+        invalidMetadata(`${field} must be a non-empty string`);
       }
     }
     if (metadata.state !== undefined && !isLifecycleState(metadata.state)) {
-      fail('state has an unexpected value');
+      invalidMetadata('state has an unexpected value');
     }
     if (
       metadata.passwordKind !== undefined &&
       metadata.passwordKind !== 'master' &&
       metadata.passwordKind !== 'custom'
     ) {
-      fail('passwordKind must be "master" or "custom"');
+      invalidMetadata('passwordKind must be "master" or "custom"');
     }
     if (metadata.passwordLabel !== undefined) {
       if (typeof metadata.passwordLabel !== 'string' || metadata.passwordLabel.trim().length === 0) {
-        fail('passwordLabel must be a non-empty string');
+        invalidMetadata('passwordLabel must be a non-empty string');
       }
       const label = metadata.passwordLabel as string;
       if (label.length > 80) {
-        fail('passwordLabel must be at most 80 characters');
+        invalidMetadata('passwordLabel must be at most 80 characters');
       }
       // eslint-disable-next-line no-control-regex -- reject C0/C1 control characters in titles
       if (/[\u0000-\u001f\u007f]/.test(label)) {
-        fail('passwordLabel contains invalid characters');
+        invalidMetadata('passwordLabel contains invalid characters');
       }
     }
     for (const field of ['wrappedMasterKeyMasterRecovery', 'masterRecoveryIV', 'masterRecoveryMac'] as const) {
       if (metadata[field] !== undefined && (typeof metadata[field] !== 'string' || metadata[field].length === 0)) {
-        fail(`${field} must be a non-empty string`);
+        invalidMetadata(`${field} must be a non-empty string`);
       }
     }
     if (metadata.lastTransitionAt !== undefined && typeof metadata.lastTransitionAt !== 'number') {
-      fail('lastTransitionAt must be a number');
+      invalidMetadata('lastTransitionAt must be a number');
     }
     if (metadata.lastError !== undefined && typeof metadata.lastError !== 'string') {
-      fail('lastError must be a string');
+      invalidMetadata('lastError must be a string');
     }
     if (
       metadata.expectedLockedFiles !== undefined &&
@@ -115,21 +116,21 @@ export class MetadataManager {
         !Number.isFinite(metadata.expectedLockedFiles) ||
         metadata.expectedLockedFiles < 0)
     ) {
-      fail('expectedLockedFiles must be a non-negative number');
+      invalidMetadata('expectedLockedFiles must be a non-negative number');
     }
     const previousFields = ['previousSalt', 'previousWrappedMasterKey', 'previousMasterKeyIV', 'previousMac'] as const;
     const hasPreviousWrap = previousFields.some((field) => metadata[field] !== undefined);
     if (hasPreviousWrap) {
       for (const field of ['previousSalt', 'previousWrappedMasterKey', 'previousMasterKeyIV'] as const) {
         if (typeof metadata[field] !== 'string' || metadata[field].length === 0) {
-          fail(`${field} must be a non-empty string when a previous password wrap is present`);
+          invalidMetadata(`${field} must be a non-empty string when a previous password wrap is present`);
         }
       }
       if (
         metadata.previousMac !== undefined &&
         (typeof metadata.previousMac !== 'string' || metadata.previousMac.length === 0)
       ) {
-        fail('previousMac must be a non-empty string');
+        invalidMetadata('previousMac must be a non-empty string');
       }
       if (
         metadata.previousIterations !== undefined &&
@@ -137,7 +138,7 @@ export class MetadataManager {
           !Number.isFinite(metadata.previousIterations) ||
           metadata.previousIterations < this.MIN_KDF_ITERATIONS)
       ) {
-        fail(`previousIterations must be >= ${this.MIN_KDF_ITERATIONS}`);
+        invalidMetadata(`previousIterations must be >= ${this.MIN_KDF_ITERATIONS}`);
       }
     }
 

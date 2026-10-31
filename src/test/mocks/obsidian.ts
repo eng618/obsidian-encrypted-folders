@@ -18,7 +18,7 @@ export class TFolder {
 export class Vault {
   files: Map<string, TFile | TFolder> = new Map();
   adapter = {
-    list: vi.fn(async (path: string) => {
+    list: vi.fn<(path: string) => Promise<{ files: string[]; folders: string[] }>>(async (path: string) => {
       const normalizedBase = normalizePath(path || '');
       const folderPrefix = normalizedBase.length > 0 ? `${normalizedBase}/` : '';
       const files: string[] = [];
@@ -51,24 +51,24 @@ export class Vault {
 
       return { files, folders: Array.from(folders) };
     }),
-    exists: vi.fn(async (path: string) => this.files.has(normalizePath(path))),
-    writeBinary: vi.fn(async (path: string, data: ArrayBuffer) => {
+    exists: vi.fn<(path: string) => Promise<boolean>>(async (path: string) => this.files.has(normalizePath(path))),
+    writeBinary: vi.fn<(path: string, data: ArrayBuffer) => Promise<void>>(async (path: string, data: ArrayBuffer) => {
       await this.createBinary(path, data);
     }),
   };
 
-  on = vi.fn();
+  on = vi.fn<(...args: unknown[]) => unknown>();
 
-  readBinary = vi.fn(async (file: TFile) => {
+  readBinary = vi.fn<(file: TFile) => Promise<ArrayBuffer>>(async (file: TFile) => {
     return file.data || new ArrayBuffer(0);
   });
 
-  modifyBinary = vi.fn(async (file: TFile, data: ArrayBuffer) => {
+  modifyBinary = vi.fn<(file: TFile, data: ArrayBuffer) => Promise<void>>(async (file: TFile, data: ArrayBuffer) => {
     file.data = data;
     file.stat.size = data.byteLength;
   });
 
-  createBinary = vi.fn(async (path: string, data: ArrayBuffer) => {
+  createBinary = vi.fn<(path: string, data: ArrayBuffer) => Promise<TFile>>(async (path: string, data: ArrayBuffer) => {
     const existing = this.files.get(path);
     if (existing instanceof TFile) {
       existing.data = data;
@@ -98,20 +98,20 @@ export class Vault {
     return file;
   });
 
-  delete = vi.fn(async (file: TFile | TFolder) => {
+  delete = vi.fn<(file: TFile | TFolder) => Promise<void>>(async (file: TFile | TFolder) => {
     this.files.delete(file.path);
     if (file.parent) {
       file.parent.children = file.parent.children.filter((c) => c !== file);
     }
   });
 
-  trash = vi.fn();
+  trash = vi.fn<(...args: unknown[]) => unknown>();
 
-  getAbstractFileByPath = vi.fn((path: string) => {
+  getAbstractFileByPath = vi.fn<(path: string) => TFile | TFolder | null>((path: string) => {
     return this.files.get(normalizePath(path)) || null;
   });
 
-  rename = vi.fn(async (file: TFile, newPath: string) => {
+  rename = vi.fn<(file: TFile, newPath: string) => Promise<void>>(async (file: TFile, newPath: string) => {
     const normalized = normalizePath(newPath);
     this.files.delete(file.path);
     if (file.parent) {
@@ -131,7 +131,7 @@ export class Vault {
     this.files.set(normalized, file);
   });
 
-  getFiles = vi.fn(() => {
+  getFiles = vi.fn<() => TFile[]>(() => {
     return Array.from(this.files.values()).filter((file): file is TFile => file instanceof TFile);
   });
 }
@@ -188,33 +188,43 @@ export class Modal {
   return (this as HTMLElement).createEl('span', options);
 };
 
+type SettingButtonMock = {
+  setButtonText: (text: string) => SettingButtonMock;
+  setCta: () => SettingButtonMock;
+  setWarning: () => SettingButtonMock;
+  setDestructive: () => SettingButtonMock;
+  setTooltip: () => SettingButtonMock;
+  setDisabled: () => SettingButtonMock;
+  onClick: (handler: () => void) => SettingButtonMock;
+};
+
 export class Setting {
   constructor(public containerEl: HTMLElement) {}
-  setName(name: string) {
+  setName(_name: string) {
     return this;
   }
   setHeading() {
     return this;
   }
-  setDesc(desc: string) {
+  setDesc(_desc: string) {
     return this;
   }
-  addButton(cb: (btn: Record<string, unknown>) => void) {
+  addButton(cb: (btn: SettingButtonMock) => void) {
     const btnEl = (this.containerEl as any).createEl
       ? (this.containerEl as any).createEl('button')
       : document.createElement('button');
-    const mockBtn = {
-      setButtonText: vi.fn((text: string) => {
+    const mockBtn: SettingButtonMock = {
+      setButtonText: vi.fn<(text: string) => SettingButtonMock>((text: string) => {
         btnEl.textContent = text;
         return mockBtn;
       }),
-      setCta: vi.fn(() => mockBtn),
-      setWarning: vi.fn(() => mockBtn),
-      setDestructive: vi.fn(() => mockBtn),
-      setTooltip: vi.fn(() => mockBtn),
-      setDisabled: vi.fn(() => mockBtn),
-      onClick: vi.fn((handler: () => void) => {
-        btnEl.onclick = handler;
+      setCta: vi.fn<() => SettingButtonMock>(() => mockBtn),
+      setWarning: vi.fn<() => SettingButtonMock>(() => mockBtn),
+      setDestructive: vi.fn<() => SettingButtonMock>(() => mockBtn),
+      setTooltip: vi.fn<() => SettingButtonMock>(() => mockBtn),
+      setDisabled: vi.fn<() => SettingButtonMock>(() => mockBtn),
+      onClick: vi.fn<(handler: () => void) => SettingButtonMock>((handler: () => void) => {
+        btnEl.addEventListener('click', handler);
         return mockBtn;
       }),
     };
@@ -223,44 +233,44 @@ export class Setting {
   }
   addToggle(cb: (t: Record<string, unknown>) => void) {
     cb({
-      setValue: vi.fn().mockReturnThis(),
-      onChange: vi.fn().mockReturnThis(),
+      setValue: vi.fn<(...args: unknown[]) => unknown>().mockReturnThis(),
+      onChange: vi.fn<(...args: unknown[]) => unknown>().mockReturnThis(),
     });
     return this;
   }
   addText(cb: (t: Record<string, unknown>) => void) {
     cb({
-      setPlaceholder: vi.fn().mockReturnThis(),
-      onChange: vi.fn().mockReturnThis(),
-      inputEl: { type: '', focus: vi.fn() },
+      setPlaceholder: vi.fn<(...args: unknown[]) => unknown>().mockReturnThis(),
+      onChange: vi.fn<(...args: unknown[]) => unknown>().mockReturnThis(),
+      inputEl: { type: '', focus: vi.fn<() => void>() },
     });
     return this;
   }
   addExtraButton(cb: (btn: Record<string, unknown>) => void) {
     cb({
-      setIcon: vi.fn().mockReturnThis(),
-      setTooltip: vi.fn().mockReturnThis(),
-      onClick: vi.fn().mockReturnThis(),
+      setIcon: vi.fn<(...args: unknown[]) => unknown>().mockReturnThis(),
+      setTooltip: vi.fn<(...args: unknown[]) => unknown>().mockReturnThis(),
+      onClick: vi.fn<(...args: unknown[]) => unknown>().mockReturnThis(),
     });
     return this;
   }
 }
 
 export class Notice {
-  constructor(message: string) {
+  constructor(public message: string) {
     console.log('Notice:', message);
   }
 }
 
 export class Plugin {
   app = new App();
-  addStatusBarItem = vi.fn(() => document.createElement('div'));
-  addSettingTab = vi.fn();
-  loadData = vi.fn(async () => ({}));
-  saveData = vi.fn(async () => {});
-  registerDomEvent = vi.fn();
-  registerEvent = vi.fn();
-  registerInterval = vi.fn();
+  addStatusBarItem = vi.fn<() => HTMLDivElement>(() => document.createElement('div'));
+  addSettingTab = vi.fn<(...args: unknown[]) => unknown>();
+  loadData = vi.fn<() => Promise<Record<string, never>>>(async () => ({}));
+  saveData = vi.fn<() => Promise<void>>(async () => {});
+  registerDomEvent = vi.fn<(...args: unknown[]) => unknown>();
+  registerEvent = vi.fn<(...args: unknown[]) => unknown>();
+  registerInterval = vi.fn<(...args: unknown[]) => unknown>();
 }
 
 export class PluginSettingTab {
@@ -286,28 +296,30 @@ export class App {
   constructor() {
     this.vault = new Vault();
     this.fileManager = {
-      trashFile: vi.fn(async (file: TFile | TFolder) => {
+      trashFile: vi.fn<(file: TFile | TFolder) => Promise<void>>(async (file: TFile | TFolder) => {
         this.vault.files.delete(file.path);
         if (file.parent) {
           file.parent.children = file.parent.children.filter((c) => c !== file);
         }
       }),
-      renameFile: vi.fn(async (file: TFile | TFolder, newPath: string) => {
-        const normalized = normalizePath(newPath);
-        this.vault.files.delete(file.path);
-        if (file.parent) {
-          file.parent.children = file.parent.children.filter((c) => c !== file);
-        }
-        file.path = normalized;
-        const parts = normalized.split('/');
-        file.name = parts.pop() || '';
-        this.vault.files.set(normalized, file);
-      }),
+      renameFile: vi.fn<(file: TFile | TFolder, newPath: string) => Promise<void>>(
+        async (file: TFile | TFolder, newPath: string) => {
+          const normalized = normalizePath(newPath);
+          this.vault.files.delete(file.path);
+          if (file.parent) {
+            file.parent.children = file.parent.children.filter((c) => c !== file);
+          }
+          file.path = normalized;
+          const parts = normalized.split('/');
+          file.name = parts.pop() || '';
+          this.vault.files.set(normalized, file);
+        },
+      ),
     };
     this.workspace = {
-      on: vi.fn(),
-      getLeavesOfType: vi.fn().mockReturnValue([]),
-      getActiveFile: vi.fn().mockReturnValue(null),
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      getLeavesOfType: vi.fn<(...args: unknown[]) => unknown[]>().mockReturnValue([]),
+      getActiveFile: vi.fn<() => null>().mockReturnValue(null),
     };
   }
 }

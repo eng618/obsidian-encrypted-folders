@@ -9,7 +9,7 @@ Provides vault-level encryption for specific folders in Obsidian. Handles key ma
 - **Package Manager**: `bun`
 - **Bundler**: `Vite` (outputs to `main.js` at root)
 - **Testing**: `Vitest` with `jsdom`
-- **Linting**: `eslint` (via `bun run lint`)
+- **Linting**: `oxlint` (via `bun run lint`)
 
 ### Essential Commands
 

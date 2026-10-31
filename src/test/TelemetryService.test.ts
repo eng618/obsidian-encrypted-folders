@@ -55,7 +55,7 @@ describe('TelemetryService', () => {
     expect(body.payload.profileId).toBe('test-profile-id');
     expect(body.payload.properties.via).toBe('manual');
     expect(body.payload.properties.plugin_version).toBe('1.0.0');
-    expect(body.payload.properties.__timestamp).toBeTruthy();
+    expect(body.payload.properties['__timestamp']).toBeTruthy();
   });
 
   test('does nothing when disabled', async () => {

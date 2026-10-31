@@ -57,7 +57,7 @@ class MockPlugin {
 describe('Explorer Indicators', () => {
   it('should apply indicator classes to encrypted folders', async () => {
     const app = new App();
-    app.workspace.getLeavesOfType = vi.fn().mockReturnValue([
+    app.workspace.getLeavesOfType = vi.fn<() => Array<{ view: { containerEl: HTMLElement } }>>().mockReturnValue([
       {
         view: {
           containerEl: document.createElement('div'),

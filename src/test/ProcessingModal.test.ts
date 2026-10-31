@@ -27,7 +27,7 @@ describe('ProcessingModal', () => {
 
   it('should request cancellation from the cancel button', () => {
     const app = new App();
-    const onCancel = vi.fn();
+    const onCancel = vi.fn<() => void>();
     const modal = new ProcessingModal(app, 'Locking folder', onCancel);
 
     modal.onOpen();

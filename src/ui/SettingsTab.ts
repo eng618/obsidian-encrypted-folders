@@ -1,11 +1,12 @@
 import type { App, Setting, SettingDefinitionItem } from 'obsidian';
-import { Notice, PluginSettingTab } from 'obsidian';
+import { PluginSettingTab } from 'obsidian';
 
 import type EncryptedFoldersPlugin from '../../main';
 import { describePasswordKind } from '../models/PasswordManagement';
 import type { FolderPasswordSummary } from '../services/FolderService';
 import { PasswordModal } from './PasswordModal';
 import { RecoveryKeyModal } from './RecoveryKeyModal';
+import { showNotice } from './UIUtils';
 
 type SettingsKey =
   | 'autoLockOnBackground'
@@ -221,12 +222,12 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
 
   private async lockAllFolders(): Promise<void> {
     await this.plugin.lockAllFoldersWithProgress();
-    new Notice('All folders locked.');
+    showNotice('All folders locked.');
   }
 
   private async runEncryptedFolderScan(): Promise<void> {
     await this.plugin.folderService.syncFolders(3, 300, true);
-    new Notice('Encrypted folder scan complete.');
+    showNotice('Encrypted folder scan complete.');
   }
 
   private cachedFolderSummaries: FolderPasswordSummary[] = [];
@@ -237,7 +238,7 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
     } catch {
       this.cachedFolderSummaries = [];
     }
-    new Notice('Folder list refreshed.');
+    showNotice('Folder list refreshed.');
   }
 
   private openMasterSetup(): void {
@@ -248,7 +249,7 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
         try {
           const recoveryKey = await this.plugin.folderService.setupMasterPassword(password);
           new RecoveryKeyModal(this.app, recoveryKey).open();
-          new Notice('Master password set. New folders will use it by default.');
+          showNotice('Master password set. New folders will use it by default.');
           return true;
         } catch (e) {
           throw e instanceof Error ? e : new Error(String(e));
@@ -286,7 +287,7 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
                 total === 0
                   ? 'Master password changed.'
                   : `Master password changed. ${rotated} of ${total} folders re-wrapped.`;
-              new Notice(
+              showNotice(
                 previousWrapsRemaining > 0
                   ? `${changed} Backup wraps remain and will be cleared on the next folder sync.`
                   : changed,
@@ -315,14 +316,14 @@ export class EncryptedFoldersSettingTab extends PluginSettingTab {
       async (password) => {
         try {
           await this.plugin.folderService.removeMasterPassword(password);
-          new Notice('Master password removed.');
+          showNotice('Master password removed.');
           return true;
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
           if (/Incorrect master password|Authentication failed/i.test(message)) {
             return false;
           }
-          new Notice(message);
+          showNotice(message);
           return true;
         }
       },

@@ -1,9 +1,10 @@
-import type { App, TFile} from 'obsidian';
-import { Notice, TFolder } from 'obsidian';
+import type { App, TFile } from 'obsidian';
+import { TFolder } from 'obsidian';
 
 import type { FolderService } from '../services/FolderService';
 import { PasswordModal } from '../ui/PasswordModal';
 import { runWithProcessingModal } from '../ui/ProcessingRunner';
+import { showNotice } from '../ui/UIUtils';
 
 export class LockedFolderReprocessCoordinator {
   private readonly delayMs = 500;
@@ -56,7 +57,7 @@ export class LockedFolderReprocessCoordinator {
     }
 
     this.prompts.add(folderToReprocess.path);
-    new Notice(`New unencrypted files were added to locked folder "${folderToReprocess.path}".`);
+    showNotice(`New unencrypted files were added to locked folder "${folderToReprocess.path}".`);
 
     const derivationCache = this.folderService.createDerivationCache();
     const modal = new PasswordModal(
@@ -67,9 +68,9 @@ export class LockedFolderReprocessCoordinator {
           this.folderService.reprocessLockedFolder(folderToReprocess, password, false, options, derivationCache),
         );
         if (success) {
-          new Notice('New files encrypted. Folder remains locked.');
+          showNotice('New files encrypted. Folder remains locked.');
         } else {
-          new Notice('Could not encrypt new files. Check the password and try again.');
+          showNotice('Could not encrypt new files. Check the password and try again.');
         }
         return success;
       },

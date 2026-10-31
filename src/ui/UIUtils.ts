@@ -1,4 +1,13 @@
 import type { Setting, TextComponent } from 'obsidian';
+import { Notice } from 'obsidian';
+
+/**
+ * Shows an Obsidian notice and returns it.
+ * Returning the instance keeps `new Notice` from being a side-effect-only expression.
+ */
+export function showNotice(message: string, duration?: number): Notice {
+  return new Notice(message, duration);
+}
 
 /**
  * Adds a password visibility toggle button to a Setting component.

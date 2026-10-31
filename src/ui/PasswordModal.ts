@@ -1,4 +1,4 @@
-import type { App} from 'obsidian';
+import type { App } from 'obsidian';
 import { Modal, Setting } from 'obsidian';
 
 import type { FolderPasswordKind } from '../models/PasswordManagement';
@@ -167,8 +167,8 @@ export class PasswordModal extends Modal {
     new Setting(contentEl)
       .setName('Use master password')
       .setDesc('Default password for folders. Turn off to use a custom password with its own title.')
-      .addToggle((toggle) => {
-        toggle.setValue(this.selectedKind === 'master').onChange((value) => {
+      .addToggle((settingToggle) => {
+        settingToggle.setValue(this.selectedKind === 'master').onChange((value) => {
           this.selectedKind = value ? 'master' : 'custom';
           this.updateKindVisibility();
         });

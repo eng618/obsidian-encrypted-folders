@@ -9,7 +9,7 @@ describe('PasswordModal Brute-Force Protection', () => {
 
   beforeEach(() => {
     app = new App();
-    mockSubmit = vi.fn();
+    mockSubmit = vi.fn<(password: string, lockImmediately?: boolean) => Promise<boolean>>();
   });
 
   it('should close the modal on a successful submission', async () => {

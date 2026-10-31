@@ -16,7 +16,7 @@ describe('Property-Based Cryptographic & Fuzzing Tests', () => {
       fc.asyncProperty(
         fc.uint8Array({ minLength: 0, maxLength: 5000 }),
         fc.string({ minLength: 8, maxLength: 64 }),
-        async (payloadBytes, password) => {
+        async (payloadBytes, _password) => {
           const payload = new Uint8Array(payloadBytes.length);
           payload.set(payloadBytes);
 
@@ -63,7 +63,7 @@ describe('Property-Based Cryptographic & Fuzzing Tests', () => {
 
           await expect(
             encryptionService.decryptWithKey(corruptedView.buffer as ArrayBuffer, masterKey, iv),
-          ).rejects.toThrow();
+          ).rejects.toThrow(/operation failed/i);
         },
       ),
       { numRuns: 30 },
@@ -84,7 +84,9 @@ describe('Property-Based Cryptographic & Fuzzing Tests', () => {
 
           const truncated = ciphertext.slice(0, Math.max(0, ciphertext.byteLength - truncateBytes));
 
-          await expect(encryptionService.decryptWithKey(truncated as ArrayBuffer, masterKey, iv)).rejects.toThrow();
+          await expect(encryptionService.decryptWithKey(truncated as ArrayBuffer, masterKey, iv)).rejects.toThrow(
+            /operation failed/i,
+          );
         },
       ),
       { numRuns: 30 },

@@ -1,7 +1,7 @@
-import type { App} from 'obsidian';
-import { Modal, Notice, Setting } from 'obsidian';
+import type { App } from 'obsidian';
+import { Modal, Setting } from 'obsidian';
 
-import { addPasswordToggle } from './UIUtils';
+import { addPasswordToggle, showNotice } from './UIUtils';
 
 export class RemovalModal extends Modal {
   private password = '';
@@ -87,12 +87,12 @@ export class RemovalModal extends Modal {
 
   private async confirmRemoval(): Promise<void> {
     if (this.confirmationText !== this.folderName) {
-      new Notice('Confirmation text does not match folder name.');
+      showNotice('Confirmation text does not match folder name.');
       return;
     }
 
     if (this.isLocked && !this.password) {
-      new Notice('Password is required.');
+      showNotice('Password is required.');
       return;
     }
 
