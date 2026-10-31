@@ -49,11 +49,11 @@
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}": [
-      "oxfmt --write",
+      "oxfmt --write --no-error-on-unmatched-pattern",
       "oxlint --fix"
     ],
     "*.{json,jsonc,md,yml,yaml}": [
-      "oxfmt --write"
+      "oxfmt --write --no-error-on-unmatched-pattern"
     ]
   },
   "engines": {
