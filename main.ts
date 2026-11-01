@@ -19,12 +19,13 @@ export type { EncryptedFoldersSettings };
 
 export default class EncryptedFoldersPlugin extends Plugin {
   settings: EncryptedFoldersSettings = DEFAULT_SETTINGS;
-  encryptionService: EncryptionService;
-  fileService: FileService;
-  folderService: FolderService;
-  reprocessCoordinator: LockedFolderReprocessCoordinator;
-  idleLockController: IdleLockController;
-  telemetryService: TelemetryService;
+  // Assigned in onload, which is the plugin lifecycle constructor.
+  encryptionService!: EncryptionService;
+  fileService!: FileService;
+  folderService!: FolderService;
+  reprocessCoordinator!: LockedFolderReprocessCoordinator;
+  idleLockController!: IdleLockController;
+  telemetryService!: TelemetryService;
 
   async onload() {
     await this.loadSettings();

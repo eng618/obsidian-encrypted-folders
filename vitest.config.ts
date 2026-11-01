@@ -10,8 +10,8 @@ export default defineConfig({
     testTimeout: 30_000,
     setupFiles: ['./src/test/setup.ts'],
     alias: {
-      obsidian: path.resolve(__dirname, './src/test/mocks/obsidian.ts'),
-      '@': path.resolve(__dirname, './src'),
+      obsidian: path.resolve(import.meta.dirname, './src/test/mocks/obsidian.ts'),
+      '@': path.resolve(import.meta.dirname, './src'),
     },
     coverage: {
       provider: 'v8',

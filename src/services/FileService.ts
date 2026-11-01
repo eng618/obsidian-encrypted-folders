@@ -1,4 +1,4 @@
-import type { TAbstractFile, Vault} from 'obsidian';
+import type { TAbstractFile, Vault } from 'obsidian';
 import { TFile, normalizePath } from 'obsidian';
 
 export class FileService {
@@ -103,7 +103,7 @@ export class FileService {
     await this.trashFile(file);
   }
 
-  private fillRandomValues(buffer: Uint8Array): void {
+  private fillRandomValues(buffer: Uint8Array<ArrayBuffer>): void {
     const size = buffer.byteLength;
     for (let i = 0; i < size; i += this.MAX_RANDOM_SIZE) {
       const chunk = buffer.subarray(i, Math.min(i + this.MAX_RANDOM_SIZE, size));

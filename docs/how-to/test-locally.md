@@ -66,7 +66,7 @@ find TestVault -name "README_ENCRYPTED.md" -delete
 ```bash
 bun run test          # unit + integration suite (Vitest)
 bun run test:coverage # with coverage report
-bun run lint          # ESLint (includes Obsidian plugin rules)
+bun run lint          # oxlint
 bun run typecheck     # tsc --noEmit
 ```
 

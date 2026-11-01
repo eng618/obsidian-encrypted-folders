@@ -16,7 +16,7 @@ To test the plugin, you must link your development build to an Obsidian vault.
 1. **Build the Plugin**:
 
    ```bash
-   npm run build
+   bun run build
    ```
 
 2. **Setup Symlinks**:

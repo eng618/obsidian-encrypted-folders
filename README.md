@@ -106,21 +106,22 @@ Network requests go only to the analytics host for event ingestion. No telemetry
 
 ### Prerequisites
 
-- NodeJS (v22+)
-- bun (v1.3.9+)
+- Node.js (v22.12+)
+- bun (v1.4.4+)
 
 ### Install Dependencies
 
 ```bash
-npm install
+bun install
 ```
 
 ### Build & Dev
 
 ```bash
-npm run dev   # Watch mode
-npm run build # Production build
-npm run lint  # Linting and type checking
+bun run dev       # Watch mode
+bun run build     # Production build
+bun run lint      # oxlint
+bun run typecheck # tsc --noEmit
 ```
 
 ## 📚 Documentation

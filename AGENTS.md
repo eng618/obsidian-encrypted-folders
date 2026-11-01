@@ -7,7 +7,7 @@ Provides vault-level encryption for specific folders in Obsidian. Handles key ma
 ## Environment & Tooling
 
 - **Package Manager**: `bun`
-- **Bundler**: `Vite` (outputs to `main.js` at root)
+- **Bundler**: `Vite` (outputs CommonJS to `dist/main.js`)
 - **Testing**: `Vitest` with `jsdom`
 - **Linting**: `oxlint` (via `bun run lint`)
 

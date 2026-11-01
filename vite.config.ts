@@ -16,7 +16,10 @@ function copyToTestVault(): Plugin {
   return {
     name: 'copy-to-test-vault',
     closeBundle: async () => {
-      const testVaultPluginDir = path.resolve(__dirname, 'TestVault/.obsidian/plugins/obsidian-encrypted-folders');
+      const testVaultPluginDir = path.resolve(
+        import.meta.dirname,
+        'TestVault/.obsidian/plugins/obsidian-encrypted-folders',
+      );
 
       // Ensure directory exists
       if (!fs.existsSync(testVaultPluginDir)) {
@@ -31,7 +34,7 @@ function copyToTestVault(): Plugin {
       ];
 
       for (const file of filesToCopy) {
-        const srcPath = path.resolve(__dirname, file.src);
+        const srcPath = path.resolve(import.meta.dirname, file.src);
         const destPath = path.resolve(testVaultPluginDir, file.dest);
 
         if (fs.existsSync(srcPath)) {
@@ -47,7 +50,7 @@ export default defineConfig({
   plugins: [copyToTestVault()],
   build: {
     lib: {
-      entry: path.resolve(__dirname, 'main.ts'),
+      entry: path.resolve(import.meta.dirname, 'main.ts'),
       formats: ['cjs'],
     },
     rollupOptions: {
@@ -80,7 +83,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(import.meta.dirname, './src'),
     },
   },
 });

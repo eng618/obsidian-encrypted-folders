@@ -15,7 +15,7 @@ By participating in this project, you agree to abide by our code of conduct. Ple
     ```
 3.  **Install dependencies**:
     ```bash
-    npm install --legacy-peer-deps
+    bun install
     ```
 4.  **Create a branch** for your changes:
     ```bash
@@ -24,12 +24,12 @@ By participating in this project, you agree to abide by our code of conduct. Ple
 
 ## 🛠 Development Workflow
 
-- **Build**: `npm run build`
-- **Watch**: `npm run dev`
-- **Lint**: `npm run lint`
-- **Test**: `npm test`
+- **Build**: `bun run build`
+- **Watch**: `bun run dev`
+- **Lint**: `bun run lint`
+- **Test**: `bun run test`
 
-We use **Vitest** for testing and **ESLint** with **Prettier** for code quality. Please ensure your changes pass all checks before submitting a Pull Request.
+We use **Vitest** for testing and **oxlint** with **oxfmt** for code quality. Please ensure your changes pass all checks before submitting a Pull Request.
 
 ## 🧪 Testing Guidelines
 

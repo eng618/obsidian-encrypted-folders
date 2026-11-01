@@ -1,18 +1,18 @@
 import { vi } from 'vitest';
 
 export class TFile {
-  path: string;
-  name: string;
-  parent: TFolder;
-  stat: { size: number; mtime: number; ctime: number };
+  path!: string;
+  name!: string;
+  parent!: TFolder;
+  stat!: { size: number; mtime: number; ctime: number };
   data?: ArrayBuffer;
 }
 
 export class TFolder {
-  path: string;
-  name: string;
-  parent: TFolder;
-  children: (TFile | TFolder)[];
+  path!: string;
+  name!: string;
+  parent!: TFolder;
+  children!: (TFile | TFolder)[];
 }
 
 export class Vault {
