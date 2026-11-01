@@ -1,4 +1,4 @@
-import type { Menu} from 'obsidian';
+import type { Menu } from 'obsidian';
 import { TFile, TFolder } from 'obsidian';
 
 import type EncryptedFoldersPlugin from '../../main';

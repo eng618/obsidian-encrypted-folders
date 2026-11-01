@@ -1,4 +1,4 @@
-import type { App} from 'obsidian';
+import type { App } from 'obsidian';
 import { Modal, Setting } from 'obsidian';
 
 import type { FolderProcessingProgress } from '../services/BatchProcessor';
