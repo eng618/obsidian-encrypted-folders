@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.7.4](https://github.com/eng618/obsidian-encrypted-folders/compare/1.7.3...1.7.4) (2026-11-01)
+
+
+### Code Refactoring
+
+* Update dependencies and build configuration to use bun and oxlint ([0460cb9](https://github.com/eng618/obsidian-encrypted-folders/commit/0460cb90508bb5e424a512a565a29c9b30d78c55))
+
+
+### Styles
+
+* Fix type import formatting across multiple files ([1f819eb](https://github.com/eng618/obsidian-encrypted-folders/commit/1f819eb7959d55c3ce11c74dce029de0cb73340e))
+
+
+### Miscellaneous Chores
+
+* **deps:** Bump actions/attest-build-provenance from 2 to 4 ([#124](https://github.com/eng618/obsidian-encrypted-folders/issues/124)) ([81ff2f2](https://github.com/eng618/obsidian-encrypted-folders/commit/81ff2f28c9e0d0e29f3b3952b158640bc99c6a85))
+
 ## [1.7.3](https://github.com/eng618/obsidian-encrypted-folders/compare/1.7.2...1.7.3) (2026-10-31)
 
 
