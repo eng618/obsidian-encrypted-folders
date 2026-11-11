@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.7.5](https://github.com/eng618/obsidian-encrypted-folders/compare/1.7.4...1.7.5) (2026-11-11)
+
+
+### Features
+
+* **telemetry:** Enhance telemetry service with project credentials and improved event tracking ([f5bf46b](https://github.com/eng618/obsidian-encrypted-folders/commit/f5bf46b56c6dc7bf604d298f20f9464872679da9))
+
+
+### Miscellaneous Chores
+
+* **deps:** Update development dependencies to latest versions ([6e0138a](https://github.com/eng618/obsidian-encrypted-folders/commit/6e0138a1b032352ff4f95ce01ff7e7afba5214bd))
+
 ## [1.7.4](https://github.com/eng618/obsidian-encrypted-folders/compare/1.7.3...1.7.4) (2026-11-01)
 
 
