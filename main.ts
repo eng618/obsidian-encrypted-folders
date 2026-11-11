@@ -8,7 +8,7 @@ import { FileService } from './src/services/FileService';
 import type { FolderProcessingOptions } from './src/services/FolderService';
 import { FolderService } from './src/services/FolderService';
 import { LockedFolderReprocessCoordinator } from './src/services/LockedFolderReprocessCoordinator';
-import { TelemetryService } from './src/services/TelemetryService';
+import { TelemetryService, telemetryDevice, telemetryOs } from './src/services/TelemetryService';
 import { updateExplorerIndicators } from './src/ui/ExplorerIndicators';
 import { IdleLockController } from './src/ui/IdleLockController';
 import { runWithProcessingModal } from './src/ui/ProcessingRunner';
@@ -35,13 +35,24 @@ export default class EncryptedFoldersPlugin extends Plugin {
       await this.saveData(this.settings);
     }
 
+    const platform = {
+      isIosApp: Platform.isIosApp,
+      isAndroidApp: Platform.isAndroidApp,
+      isWin: Platform.isWin,
+      isLinux: Platform.isLinux,
+      isMacOS: Platform.isMacOS,
+      isMobile: Platform.isMobile,
+    };
     this.telemetryService = new TelemetryService(
       () => this.settings.telemetryEnabled,
       () => ensureTelemetryId(this.settings),
       () => ({
-        plugin_version: this.manifest.version,
-        platform: Platform.isMobile ? 'mobile' : 'desktop',
+        pluginVersion: this.manifest.version,
+        os: telemetryOs(platform),
+        device: telemetryDevice(platform),
+        platform: platform.isMobile ? 'mobile' : 'desktop',
       }),
+      { getDebugLogging: () => this.settings.debugLogging },
     );
 
     this.encryptionService = new EncryptionService();

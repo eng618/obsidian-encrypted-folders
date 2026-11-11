@@ -100,7 +100,9 @@ What is **never** collected:
 - Vault paths, folder names, filenames, file contents, passwords, recovery keys, or encryption keys.
 - Anything that could identify you or the contents of your vault.
 
-Network requests go only to the analytics host for event ingestion. No telemetry event ever blocks or affects encryption behavior — all reporting is best-effort and fire-and-forget.
+Network requests go only to the analytics host for event ingestion (`POST /api/track`). Release builds include a project client id and client secret so that host will accept the event. Those values identify the analytics project. They are not a user credential, and they are injected at build time rather than committed. No telemetry event ever blocks or affects encryption behavior. Reporting is best-effort and fire-and-forget.
+
+Events show up in OpenPanel under Events and Profiles. The default website Overview counts pageviews and does not list these custom events.
 
 ## 🛠️ Development
 
@@ -123,6 +125,8 @@ bun run build     # Production build
 bun run lint      # oxlint
 bun run typecheck # tsc --noEmit
 ```
+
+A production build sends telemetry only when `OPENPANEL_CLIENT_ID` and `OPENPANEL_CLIENT_SECRET` are set in the environment. Without them the plugin stays quiet.
 
 ## 📚 Documentation
 

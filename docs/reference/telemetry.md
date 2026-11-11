@@ -4,11 +4,17 @@
 
 ## What and where
 
-Events are sent to a self-hosted OpenPanel instance via its public (secretless) ingest: `POST {apiUrl}/track` with the project `clientId` header. No client secret is embedded in the plugin. Networking uses Obsidian's `requestUrl`, is fire-and-forget with a 5-second timeout and a 20-event queue cap, and can never break encryption flows.
+Events are sent to a self-hosted OpenPanel instance: `POST https://openpanel.gventureshq.com/api/track`. This host accepts a track call when both the project client id and client secret are present. A secretless post is rejected by the gateway and never stored.
+
+Those credentials are injected at build time from `OPENPANEL_CLIENT_ID` and `OPENPANEL_CLIENT_SECRET`. They are not committed. A build with either value missing sends nothing. The release workflow passes the same names from GitHub Actions secrets, so the published `main.js` contains the project secret. That secret identifies the analytics project. It is not a user credential.
+
+Networking uses Obsidian's `requestUrl`, is fire-and-forget, retries once on HTTP 502, 503, or 504, and caps the queue at 20 events. It can never break encryption flows. Each event also sends `__os`, `__device`, and a coarse `__identify` so OpenPanel opens a client session and a profile. The plugin sets `User-Agent` to `encrypted-folders/<version> (<os>; obsidian)`.
+
+Look for events under **Events** and **Profiles**, or on a custom dashboard. The default Overview chart counts website pageviews and stays empty for these custom events.
 
 ## Identity
 
-A random per-vault UUID (`telemetryId`), generated on first load. No account, email, or identifying information. No `identify()` calls with personal data.
+A random per-vault UUID (`telemetryId`), generated on first load. No account, email, or identifying information. The track payload's `__identify` carries only plugin version, OS, and platform for that same id.
 
 ## Event catalog
 

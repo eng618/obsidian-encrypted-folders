@@ -47,6 +47,10 @@ function copyToTestVault(): Plugin {
 }
 
 export default defineConfig({
+  define: {
+    'import.meta.env.OPENPANEL_CLIENT_ID': JSON.stringify(process.env.OPENPANEL_CLIENT_ID ?? ''),
+    'import.meta.env.OPENPANEL_CLIENT_SECRET': JSON.stringify(process.env.OPENPANEL_CLIENT_SECRET ?? ''),
+  },
   plugins: [copyToTestVault()],
   build: {
     lib: {
