@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.6](https://github.com/eng618/obsidian-encrypted-folders/compare/1.7.5...1.7.6) (2026-11-13)
+
+
+### Miscellaneous Chores
+
+* **deps-dev:** Bump jsdom from 30.1.3 to 31.0.0 ([#129](https://github.com/eng618/obsidian-encrypted-folders/issues/129)) ([61bc99c](https://github.com/eng618/obsidian-encrypted-folders/commit/61bc99c6a0c62c927d0bfbf7d6757c052ab3b9cf))
+* **deps-dev:** Bump oxfmt from 0.75.0 to 0.77.0 ([#127](https://github.com/eng618/obsidian-encrypted-folders/issues/127)) ([58f66f3](https://github.com/eng618/obsidian-encrypted-folders/commit/58f66f3f99a5b0ef5ffc82e56b4bd385b8785d4c))
+
 ## [1.7.5](https://github.com/eng618/obsidian-encrypted-folders/compare/1.7.4...1.7.5) (2026-11-11)
 
 
