@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.7](https://github.com/eng618/obsidian-encrypted-folders/compare/1.7.6...1.7.7) (2026-11-13)
+
+
+### Documentation
+
+* Add GitNexus CLI and debugging skills documentation ([bad70cd](https://github.com/eng618/obsidian-encrypted-folders/commit/bad70cd7467826e168a5e305c7dca3402247dab3))
+
 ## [1.7.6](https://github.com/eng618/obsidian-encrypted-folders/compare/1.7.5...1.7.6) (2026-11-13)
 
 
