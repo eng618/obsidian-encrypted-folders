@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.7.7](https://github.com/eng618/obsidian-encrypted-folders/compare/1.7.6...1.7.7) (2026-11-24)
+
+
+### Documentation
+
+* Add GitNexus CLI and debugging skills documentation ([bad70cd](https://github.com/eng618/obsidian-encrypted-folders/commit/bad70cd7467826e168a5e305c7dca3402247dab3))
+
+
+### Miscellaneous Chores
+
+* **deps-dev:** Bump @vitest/coverage-v8 from 5.1.0 to 5.1.1 ([#145](https://github.com/eng618/obsidian-encrypted-folders/issues/145)) ([a3706d0](https://github.com/eng618/obsidian-encrypted-folders/commit/a3706d0299744d0670dcb7a241772c65baf20db9))
+* **deps-dev:** Bump fast-check from 4.10.2 to 4.10.3 ([#140](https://github.com/eng618/obsidian-encrypted-folders/issues/140)) ([cc96442](https://github.com/eng618/obsidian-encrypted-folders/commit/cc964423366852ad1b608243fa88be1c9851723b))
+* **deps-dev:** Bump jsdom from 31.0.0 to 31.0.1 ([#139](https://github.com/eng618/obsidian-encrypted-folders/issues/139)) ([192da50](https://github.com/eng618/obsidian-encrypted-folders/commit/192da5028903fbc8f0e7dbcc7174665885119d3d))
+* **deps-dev:** Bump lint-staged from 17.6.0 to 17.6.1 ([#141](https://github.com/eng618/obsidian-encrypted-folders/issues/141)) ([df4a2e9](https://github.com/eng618/obsidian-encrypted-folders/commit/df4a2e9bd6dd844c2ee608b7f02bd6182bee9df4))
+* **deps-dev:** Bump oxfmt from 0.77.0 to 0.79.0 ([#142](https://github.com/eng618/obsidian-encrypted-folders/issues/142)) ([83e2e2c](https://github.com/eng618/obsidian-encrypted-folders/commit/83e2e2cf07ddce547f816571c6c220e0b9608c83))
+* **deps-dev:** Bump oxlint from 1.93.0 to 1.94.0 ([#143](https://github.com/eng618/obsidian-encrypted-folders/issues/143)) ([cfb6dca](https://github.com/eng618/obsidian-encrypted-folders/commit/cfb6dca45a9a5c51fe9fcf2ca4ae017bfbceed06))
+* **deps-dev:** Bump vitest from 5.1.0 to 5.1.1 ([#144](https://github.com/eng618/obsidian-encrypted-folders/issues/144)) ([663496b](https://github.com/eng618/obsidian-encrypted-folders/commit/663496bcf83f8af9149285502ee892c363273219))
+
 ## [1.7.6](https://github.com/eng618/obsidian-encrypted-folders/compare/1.7.5...1.7.6) (2026-11-13)
 
 
